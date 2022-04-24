@@ -221,7 +221,7 @@ public:
 	{
 		const std::uint32_t operand_id = operands_count_.fetch_add(1, std::memory_order_relaxed);
 		auto subscription_callback = hi::SubscriptionCallback<Operand>::create(
-			[this, operand_id](Operand operand_value) mutable
+			[this, operand_id](Operand operand_value, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
 			{
 				future_node_logic_->send(
 					operand_id,

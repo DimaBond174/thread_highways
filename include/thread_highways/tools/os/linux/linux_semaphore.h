@@ -37,47 +37,35 @@ public:
 		}
 	}
 
-	void wait()
+	bool wait()
 	{
-		if (!keep_run_.load(std::memory_order_acquire))
-		{
-			return;
-		}
-		sem_wait(&m_sema_);
+		return wait_for(std::chrono::nanoseconds{100000000});
 	}
 
-	void wait_for(std::chrono::nanoseconds ns)
+	bool wait_for(std::chrono::nanoseconds ns)
 	{
 		if (!keep_run_.load(std::memory_order_acquire))
 		{
-			return;
+			return false;
 		}
 		// The basic POSIX semaphore does not support a block time, but rather a deadline.
 		timespec deadline;
 
 		clock_gettime(CLOCK_REALTIME, &deadline);
+		const auto ns_count = ns.count() + deadline.tv_nsec;
+		deadline.tv_sec += static_cast<decltype(deadline.tv_sec)>(ns_count / 1000000000);
+		deadline.tv_nsec = static_cast<decltype(deadline.tv_nsec)>(ns_count % 1000000000);
 
-		deadline.tv_sec += static_cast<decltype(deadline.tv_sec)>(ns.count() / 1000000000);
-		deadline.tv_nsec += static_cast<decltype(deadline.tv_nsec)>(ns.count() % 1000000000);
-
-		sem_timedwait(&m_sema_, &deadline);
-	}
-
-	bool wait_for_success()
-	{
-		while (keep_run_.load(std::memory_order_acquire))
+		const auto rc = sem_timedwait(&m_sema_, &deadline);
+		switch (rc)
 		{
-			int rc = sem_wait(&m_sema_);
-			if (0 == rc)
-			{
-				return true;
-			}
-			if (errno != EINTR)
-			{
-				return false;
-			}
-		} // while
-		return false;
+		case EINTR:
+		case ETIMEDOUT:
+		case 0:
+			return keep_run_.load(std::memory_order_acquire);
+		default:
+			return false;
+		}
 	}
 
 	// Если нужен true|false семафор - то не постим если уже запостили

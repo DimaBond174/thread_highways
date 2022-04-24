@@ -1,8 +1,8 @@
 #ifndef THREAD_MAIL_BOX_WITH_CAPACITY_AND_SEMA_H
 #define THREAD_MAIL_BOX_WITH_CAPACITY_AND_SEMA_H
 
-#include <thread_highways/tools/error_logger.h>
-#include <thread_highways/tools/linuxsemaphore.h>
+#include <thread_highways/tools/logger.h>
+#include <thread_highways/tools/os/system_switch.h>
 #include <thread_highways/tools/stack.h>
 
 #include <atomic>
@@ -46,9 +46,8 @@ template <typename T>
 class MailBox
 {
 public:
-	MailBox(std::shared_ptr<std::atomic<std::uint32_t>> global_run_id, ErrorLoggerPtr error_logger = nullptr)
-		: global_run_id_{std::move(global_run_id)}
-		, error_logger_{std::move(error_logger)}
+	MailBox(InternalLogger logger)
+		: logger_{std::move(logger)}
 	{
 	}
 
@@ -83,17 +82,6 @@ public:
 		work_queue_semaphore_.signal(count);
 	}
 
-	//	void worker_wait_for_messages(const std::uint32_t your_run_id, const std::atomic<std::uint32_t> &
-	//your_global_run_id)
-	//	{
-	//		const auto run_id = global_run_id_->load(std::memory_order_acquire);
-	//		while (!work_queue_.access_stack()
-	//			&& run_id == global_run_id_->load(std::memory_order_relaxed)
-	//			&& your_run_id == your_global_run_id.load(std::memory_order_relaxed))
-	//		{
-	//		  work_queue_semaphore_.wait();
-	//		}
-	//	}
 	void worker_wait_for_messages()
 	{
 		work_queue_semaphore_.wait();
@@ -119,8 +107,6 @@ public:
 
 	void destroy()
 	{
-		global_run_id_->fetch_add(1);
-
 		empty_holders_stack_semaphore_.destroy();
 		work_queue_semaphore_.destroy();
 		messages_stack_semaphore_.destroy();
@@ -143,10 +129,7 @@ public: // IMailBoxSendHere
 		{
 			if (capacity_.load(std::memory_order_relaxed) <= allocated_holders_.load(std::memory_order_relaxed))
 			{
-				if (error_logger_)
-				{
-					(*error_logger_)("MailBox: no more holders");
-				}
+				logger_("MailBox: no more holders", __FILE__, __LINE__);
 				return false;
 			}
 			++allocated_holders_;
@@ -174,10 +157,8 @@ public: // IMailBoxSendHere
 			}
 			else
 			{
-				const auto run_id = global_run_id_->load(std::memory_order_acquire);
-				while (!holder && run_id == global_run_id_->load(std::memory_order_relaxed))
+				while (!holder && empty_holders_stack_semaphore_.wait())
 				{
-					empty_holders_stack_semaphore_.wait();
 					holder = empty_holders_stack_.pop();
 				}
 				if (holder)
@@ -195,7 +176,7 @@ public: // IMailBoxSendHere
 	}
 
 private:
-	const ErrorLoggerPtr error_logger_;
+	const InternalLogger logger_;
 
 	// Заполненные ожидающие обработки холдеры
 	ThreadSafeStack<Holder<T>> messages_stack_;
@@ -208,8 +189,6 @@ private:
 	// Ограничитель аллокаций холдеров
 	std::atomic<std::uint32_t> capacity_{1024};
 	std::atomic<std::uint32_t> allocated_holders_{0};
-
-	const std::shared_ptr<std::atomic<std::uint32_t>> global_run_id_;
 
 	// развёрнутый стэк - так что сообщения теперь в правильном порядке.
 	ThreadSafeStack<Holder<T>> work_queue_;

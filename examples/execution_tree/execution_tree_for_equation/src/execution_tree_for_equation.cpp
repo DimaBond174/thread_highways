@@ -82,7 +82,7 @@ struct SumCalculator : public hi::INode
 */
 void test_1()
 {
-	const auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	const auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	const auto highway_mailbox = highway->mailbox();
 
 	hi::ExecutionTree execution_tree;
@@ -173,7 +173,7 @@ void test_1()
 	execution_tree.add_node(result_future_node);
 	execution_tree.current_executed_node_publisher()->subscribe(hi::Subscription<hi::CurrentExecutedNode>::create(
 		hi::SubscriptionCallback<hi::CurrentExecutedNode>::create(
-			[&](hi::CurrentExecutedNode publication) mutable
+			[&](hi::CurrentExecutedNode publication, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
 			{
 				std::cout << "CurrentExecutedNode[" << publication.node_id_ << "] now executed("
 						  << publication.in_progress_ << "), achieved_progress:" << publication.achieved_progress_

@@ -65,6 +65,8 @@ template <typename Publication, bool resend_to_just_connected = true, bool send_
 class BufferedRetransmitter
 {
 public:
+	typedef Publication PublicationType;
+
 	BufferedRetransmitter(
 		std::weak_ptr<BufferedRetransmitter<Publication, resend_to_just_connected, send_new_only>> self_weak,
 		ISubscribeHerePtr<Publication> subscribe_channel,

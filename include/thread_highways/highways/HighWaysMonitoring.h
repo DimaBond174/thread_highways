@@ -20,14 +20,6 @@ class HighWaysMonitoring
 public:
 	HighWaysMonitoring(std::chrono::milliseconds check_interval)
 		: check_interval_{check_interval}
-		, global_keep_run_{std::make_shared<std::atomic_bool>(true)}
-	{
-		start();
-	}
-
-	HighWaysMonitoring(std::chrono::milliseconds check_interval, std::shared_ptr<std::atomic_bool> global_keep_run)
-		: check_interval_{check_interval}
-		, global_keep_run_{std::move(global_keep_run)}
 	{
 		start();
 	}
@@ -46,8 +38,19 @@ public:
 
 	void destroy()
 	{
-		global_keep_run_->store(false, std::memory_order_release);
+		global_keep_run_.store(false, std::memory_order_release);
 		cv_.notify_all();
+		worker_thread_.join();
+	}
+
+	void pause()
+	{
+		paused_.store(false, std::memory_order_release);
+	}
+
+	void resume()
+	{
+		paused_.store(true, std::memory_order_release);
 	}
 
 private:
@@ -65,52 +68,69 @@ private:
 		std::unique_lock<std::mutex> lk(cv_m_);
 		SingleThreadStack<Holder<std::shared_ptr<IHighWay>>> local_highways_stack_from;
 		SingleThreadStack<Holder<std::shared_ptr<IHighWay>>> local_highways_stack_to;
-		do
-		{
-			highways_stack_.move_to(local_highways_stack_from);
-			for (auto holder = local_highways_stack_from.pop();
-				 holder && global_keep_run_->load(std::memory_order_acquire);
-				 holder = local_highways_stack_from.pop())
-			{
-				if (holder->t_->self_check())
+		{ // finaliser scope
+			RAIIfinaliser finaliser{
+				[&]
 				{
-					local_highways_stack_to.push(holder);
-				}
-				else
-				{
-					delete holder;
-				}
-			}
-
-			if (!global_keep_run_->load(std::memory_order_relaxed))
+					// on destroy
+					highways_stack_.move_to(local_highways_stack_from);
+					for (auto holder = local_highways_stack_from.get_first(); holder; holder = holder->next_in_stack_)
+					{
+						holder->t_->destroy();
+					}
+					for (auto holder = local_highways_stack_to.get_first(); holder; holder = holder->next_in_stack_)
+					{
+						holder->t_->destroy();
+					}
+				}};
+			do
 			{
-				break;
-			}
-			local_highways_stack_to.swap(local_highways_stack_from);
-			cv_.wait_for(lk, check_interval_);
-		}
-		while (true); // main loop
+				highways_stack_.move_to(local_highways_stack_from);
+				for (auto holder = local_highways_stack_from.pop(); holder; holder = local_highways_stack_from.pop())
+				{
+					if (holder->t_->self_check())
+					{
+						local_highways_stack_to.push(holder);
+					}
+					else
+					{
+						delete holder;
+					}
+					if (!global_keep_run_.load(std::memory_order_acquire))
+					{
+						return;
+					}
+				}
 
-		// on destroy
-		highways_stack_.move_to(local_highways_stack_from);
-		for (auto holder = local_highways_stack_from.get_first(); holder; holder = holder->next_in_stack_)
-		{
-			holder->t_->destroy();
-		}
-		for (auto holder = local_highways_stack_to.get_first(); holder; holder = holder->next_in_stack_)
-		{
-			holder->t_->destroy();
-		}
+				if (!global_keep_run_.load(std::memory_order_relaxed))
+				{
+					break;
+				}
+				local_highways_stack_to.swap(local_highways_stack_from);
+
+				do
+				{
+					cv_.wait_for(lk, check_interval_);
+					if (!global_keep_run_.load(std::memory_order_acquire))
+					{
+						return;
+					}
+				}
+				while (paused_.load(std::memory_order_acquire));
+			}
+			while (true); // main loop
+		} // finaliser scope
 	}
 
 private:
 	const std::chrono::milliseconds check_interval_;
-	const std::shared_ptr<std::atomic_bool> global_keep_run_;
+	std::atomic_bool global_keep_run_{true};
 	RAIIthread worker_thread_;
 	ThreadSafeStack<Holder<std::shared_ptr<IHighWay>>> highways_stack_;
 
 	std::condition_variable cv_;
 	std::mutex cv_m_;
+	std::atomic_bool paused_{false};
 };
 
 } // namespace hi

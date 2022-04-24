@@ -8,9 +8,9 @@
 #include <memory>
 
 void test_highways(
-	std::shared_ptr<hi::SerialHighWay> highway1,
-	std::shared_ptr<hi::SerialHighWay> highway2,
-	std::shared_ptr<hi::SerialHighWay> highway3)
+	std::shared_ptr<hi::IHighWay> highway1,
+	std::shared_ptr<hi::IHighWay> highway2,
+	std::shared_ptr<hi::IHighWay> highway3)
 {
 	struct Message
 	{
@@ -113,36 +113,20 @@ void test_highways(
 	highway3->destroy();
 } // test_highways
 
-void test_highways_with_default_main_loop_runnable()
-{
-	std::cout << "====================================" << std::endl;
-	std::cout << "test_highways_with_custom_main_loop_runnable" << std::endl;
-	std::cout << "====================================" << std::endl;
-	test_highways(
-		hi::make_self_shared<hi::SerialHighWay>(std::nullopt),
-		hi::make_self_shared<hi::SerialHighWay>(std::nullopt),
-		hi::make_self_shared<hi::SerialHighWay>(std::nullopt));
-	std::cout << "-----------------------------------------------------------------------" << std::endl;
-}
-
 void test_highways_with_custom_main_loop_runnable()
 {
 	std::cout << "====================================" << std::endl;
 	std::cout << "test_highways_with_custom_main_loop_runnable" << std::endl;
 	std::cout << "====================================" << std::endl;
 	test_highways(
-		hi::make_self_shared<hi::SerialHighWay>(
-			hi::HighWayMainLoopRunnable::create([](hi::HighWayBundle &, const std::uint32_t) {}, __FILE__, __LINE__)),
-		hi::make_self_shared<hi::SerialHighWay>(
-			hi::HighWayMainLoopRunnable::create([](hi::HighWayBundle &, const std::uint32_t) {}, __FILE__, __LINE__)),
-		hi::make_self_shared<hi::SerialHighWay>(
-			hi::HighWayMainLoopRunnable::create([](hi::HighWayBundle &, const std::uint32_t) {}, __FILE__, __LINE__)));
+		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>(),
+		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>(),
+		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>());
 	std::cout << "-----------------------------------------------------------------------" << std::endl;
 } // test_highways_with_custom_main_loop_runnable
 
 int main(int /* argc */, char ** /* argv */)
 {
-	test_highways_with_default_main_loop_runnable();
 	test_highways_with_custom_main_loop_runnable();
 
 	std::cout << "Tests finished" << std::endl;

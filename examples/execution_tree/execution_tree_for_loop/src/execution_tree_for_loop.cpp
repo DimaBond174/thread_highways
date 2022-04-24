@@ -4,7 +4,7 @@
 
 void test_1()
 {
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();
 
 	auto ifelse_logic_node = hi::make_self_shared<hi::IfElseFutureNode<double, double, std::string>>(
@@ -28,11 +28,11 @@ void test_1()
 		highway_mailbox);
 
 	// loop
-	ifelse_logic_node->if_result_channel()->subscribe(ifelse_logic_node->subscription<false>());
+	ifelse_logic_node->if_result_channel()->subscribe(ifelse_logic_node->subscription(false));
 
 	// result waiter
 	auto result_future_node = hi::make_self_shared<hi::ResultWaitFutureNode<std::string>>(highway_mailbox);
-	ifelse_logic_node->else_result_channel()->subscribe(result_future_node->subscription<true>());
+	ifelse_logic_node->else_result_channel()->subscribe(result_future_node->subscription(true));
 
 	// it is not necessary to save the block diagram of the algorithm in the tree
 	// hi::ExecutionTree execution_tree;

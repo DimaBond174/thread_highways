@@ -8,9 +8,9 @@
 #include <memory>
 
 void test_highways(
-	std::shared_ptr<hi::SerialHighWay> highway1,
-	std::shared_ptr<hi::SerialHighWay> highway2,
-	std::shared_ptr<hi::SerialHighWay> highway3)
+	std::shared_ptr<hi::IHighWay> highway1,
+	std::shared_ptr<hi::IHighWay> highway2,
+	std::shared_ptr<hi::IHighWay> highway3)
 {
 	struct Message
 	{
@@ -26,9 +26,9 @@ void test_highways(
 	auto highway2_mailbox = highway2->mailbox();
 	auto highway3_mailbox = highway3->mailbox();
 
-	auto protector1 = std::weak_ptr<hi::SerialHighWay>(highway1);
-	auto protector2 = std::weak_ptr<hi::SerialHighWay>(highway2);
-	auto protector3 = std::weak_ptr<hi::SerialHighWay>(highway3);
+	auto protector1 = std::weak_ptr(highway1);
+	auto protector2 = std::weak_ptr(highway2);
+	auto protector3 = std::weak_ptr(highway3);
 
 	// must run on highway1
 	std::function<void(std::unique_ptr<Message> &&)> resender1;
@@ -126,9 +126,9 @@ void test_highways_with_default_main_loop_runnable()
 	std::cout << "test_highways_with_custom_main_loop_runnable" << std::endl;
 	std::cout << "====================================" << std::endl;
 	test_highways(
-		hi::make_self_shared<hi::SerialHighWay>(std::nullopt),
-		hi::make_self_shared<hi::SerialHighWay>(std::nullopt),
-		hi::make_self_shared<hi::SerialHighWay>(std::nullopt));
+		hi::make_self_shared<hi::SerialHighWay<>>(),
+		hi::make_self_shared<hi::SerialHighWay<>>(),
+		hi::make_self_shared<hi::SerialHighWay<>>());
 	std::cout << "-----------------------------------------------------------------------" << std::endl;
 }
 
@@ -138,12 +138,9 @@ void test_highways_with_custom_main_loop_runnable()
 	std::cout << "test_highways_with_custom_main_loop_runnable" << std::endl;
 	std::cout << "====================================" << std::endl;
 	test_highways(
-		hi::make_self_shared<hi::SerialHighWay>(
-			hi::HighWayMainLoopRunnable::create([](hi::HighWayBundle &, const std::uint32_t) {}, __FILE__, __LINE__)),
-		hi::make_self_shared<hi::SerialHighWay>(
-			hi::HighWayMainLoopRunnable::create([](hi::HighWayBundle &, const std::uint32_t) {}, __FILE__, __LINE__)),
-		hi::make_self_shared<hi::SerialHighWay>(
-			hi::HighWayMainLoopRunnable::create([](hi::HighWayBundle &, const std::uint32_t) {}, __FILE__, __LINE__)));
+		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>(),
+		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>(),
+		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>());
 	std::cout << "-----------------------------------------------------------------------" << std::endl;
 } // test_highways_with_custom_main_loop_runnable
 

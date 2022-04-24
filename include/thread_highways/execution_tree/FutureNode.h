@@ -156,8 +156,12 @@ public:
 	{
 	}
 
-	template <bool send_may_fail = true>
-	Subscription<Parameter> subscription()
+	Subscription<Parameter> subscription(bool send_may_fail = true) const
+	{
+		return send_may_fail ? subscription_send_may_fail() : subscription_send_may_blocked();
+	}
+
+	Subscription<Parameter> subscription_send_may_fail() const
 	{
 		struct SubscriptionProtectedHolderImpl : public Subscription<Parameter>::SubscriptionHolder
 		{
@@ -185,14 +189,45 @@ public:
 					},
 					future_node_logic_->get_code_filename(),
 					future_node_logic_->get_code_line());
-				if constexpr (send_may_fail)
+				return high_way_mail_box_->send_may_fail(std::move(message));
+			}
+
+			FutureNodeLogicPtr<Parameter, Result> future_node_logic_;
+			IHighWayMailBoxPtr high_way_mail_box_;
+		};
+
+		return Subscription<Parameter>{new SubscriptionProtectedHolderImpl{future_node_logic_, high_way_mail_box_}};
+	}
+
+	Subscription<Parameter> subscription_send_may_blocked() const
+	{
+		struct SubscriptionProtectedHolderImpl : public Subscription<Parameter>::SubscriptionHolder
+		{
+			SubscriptionProtectedHolderImpl(
+				FutureNodeLogicPtr<Parameter, Result> future_node_logic,
+				IHighWayMailBoxPtr high_way_mail_box)
+				: future_node_logic_{std::move(future_node_logic)}
+				, high_way_mail_box_{std::move(high_way_mail_box)}
+			{
+			}
+
+			bool operator()(Parameter publication) override
+			{
+				if (!future_node_logic_->alive())
 				{
-					return high_way_mail_box_->send_may_fail(std::move(message));
+					return false;
 				}
-				else
-				{
-					return high_way_mail_box_->send_may_blocked(std::move(message));
-				}
+
+				auto message = hi::Runnable::create(
+					[this, subscription_callback = future_node_logic_, publication = std::move(publication)](
+						const std::atomic<std::uint32_t> &,
+						const std::uint32_t) mutable
+					{
+						subscription_callback->send(std::move(publication));
+					},
+					future_node_logic_->get_code_filename(),
+					future_node_logic_->get_code_line());
+				return high_way_mail_box_->send_may_blocked(std::move(message));
 			}
 
 			FutureNodeLogicPtr<Parameter, Result> future_node_logic_;

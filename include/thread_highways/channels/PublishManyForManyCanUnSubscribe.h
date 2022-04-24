@@ -16,6 +16,8 @@ template <typename Publication>
 class PublishManyForManyCanUnSubscribe : public IPublisher<Publication>
 {
 public:
+	typedef Publication PublicationType;
+
 	PublishManyForManyCanUnSubscribe(std::weak_ptr<PublishManyForManyCanUnSubscribe<Publication>> self_weak)
 		: self_weak_{std::move(self_weak)}
 	{

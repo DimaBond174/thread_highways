@@ -11,16 +11,13 @@ using namespace std::chrono_literals;
 
 void monitor_shortage_of_holders()
 {
-	auto logger = std::make_shared<hi::ErrorLogger>(
+	auto logger = hi::create_default_logger(
 		[](std::string err)
 		{
 			std::cout << err << std::endl;
 		});
-	auto highway = hi::make_self_shared<hi::SerialHighWay>(
-		std::nullopt,
-		nullptr,
-		"SerialHighWay:monitor_shortage_of_holders",
-		std::move(logger));
+	auto highway =
+		hi::make_self_shared<hi::SerialHighWay<>>("SerialHighWay:monitor_shortage_of_holders", std::move(logger));
 	highway->set_capacity(1);
 
 	// hi::HighWaysMonitoring monitoring{100ms};
@@ -28,7 +25,7 @@ void monitor_shortage_of_holders()
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::uint32_t>>();
 	auto subscription_callback = hi::SubscriptionCallback<std::uint32_t>::create(
-		[&](std::uint32_t)
+		[&](std::uint32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			// std::this_thread::sleep_for(100ms);
 		},
@@ -48,20 +45,16 @@ void monitor_shortage_of_holders()
 
 void monitor_exception()
 {
-	auto logger = std::make_shared<hi::ErrorLogger>(
+	auto logger = hi::create_default_logger(
 		[](std::string err)
 		{
 			std::cout << err << std::endl;
 		});
-	auto highway = hi::make_self_shared<hi::SerialHighWay>(
-		std::nullopt,
-		nullptr,
-		"SerialHighWay:monitor_exception",
-		std::move(logger));
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>("SerialHighWay:monitor_exception", std::move(logger));
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
 	auto subscription_callback = hi::SubscriptionCallback<std::int32_t>::create(
-		[&](std::int32_t)
+		[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			throw std::logic_error("some logic_error");
 		},
@@ -79,14 +72,12 @@ void monitor_exception()
 
 void monitor_hungs()
 {
-	auto logger = std::make_shared<hi::ErrorLogger>(
+	auto logger = hi::create_default_logger(
 		[](std::string err)
 		{
 			std::cout << err << std::endl;
 		});
-	auto highway = hi::make_self_shared<hi::SerialHighWay>(
-		std::nullopt,
-		nullptr,
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>(
 		"SerialHighWay:monitor_hungs",
 		std::move(logger),
 		std::chrono::milliseconds{10});
@@ -96,7 +87,7 @@ void monitor_hungs()
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
 	auto subscription_callback = hi::SubscriptionCallback<std::int32_t>::create(
-		[&](std::int32_t)
+		[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			std::this_thread::sleep_for(1000ms);
 		},
@@ -114,21 +105,19 @@ void monitor_hungs()
 
 void monitor_debug()
 {
-	auto logger = std::make_shared<hi::ErrorLogger>(
+	auto logger = hi::create_default_logger(
 		[](std::string err)
 		{
 			std::cout << err << std::endl;
 		});
-	auto highway = hi::make_self_shared<hi::SerialHighWayDebug>(
-		std::nullopt,
-		nullptr,
+	auto highway = hi::make_self_shared<hi::SerialHighWayDebug<>>(
 		"SerialHighWayDebug:monitor_debug",
 		std::move(logger),
 		std::chrono::milliseconds{10});
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
 	auto subscription_callback = hi::SubscriptionCallback<std::int32_t>::create(
-		[&](std::int32_t i)
+		[&](std::int32_t i, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			if (i == 0)
 			{
@@ -150,26 +139,24 @@ void monitor_debug()
 
 void monitor_and_repair_hungs()
 {
-	auto logger = std::make_shared<hi::ErrorLogger>(
+	auto logger = hi::create_default_logger(
 		[](std::string err)
 		{
 			std::cout << err << std::endl;
 		});
 	// auto highway = hi::make_self_shared<hi::SerialHighWay>(std::nullopt, nullptr,
 	// "SerialHighWaySelfRepair:monitor_and_repair_hungs", std::move(logger), std::chrono::milliseconds{10});
-	auto highway = hi::make_self_shared<hi::SerialHighWayDebug>(
-		std::nullopt,
-		nullptr,
+	auto highway = hi::make_self_shared<hi::SerialHighWayDebug<>>(
 		"SerialHighWaySelfRepair:monitor_and_repair_hungs",
 		std::move(logger),
-		std::chrono::milliseconds{10});
+		10ms);
 
 	hi::HighWaysMonitoring monitoring{100ms};
 	monitoring.add_for_monitoring(highway);
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
 	auto subscription_callback = hi::SubscriptionCallback<std::int32_t>::create(
-		[&](std::int32_t)
+		[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			assert(highway->current_execution_on_this_highway());
 			std::this_thread::sleep_for(100ms);
@@ -191,26 +178,24 @@ void monitor_and_repair_hungs()
 
 void monitor_and_repair_hungs_concurrent_highway()
 {
-	auto logger = std::make_shared<hi::ErrorLogger>(
+	auto logger = hi::create_default_logger(
 		[](std::string err)
 		{
 			std::cout << err << std::endl;
 		});
 
-	auto highway = hi::make_self_shared<hi::ConcurrentHighWayDebug>(
-		std::nullopt,
-		nullptr,
+	auto highway = hi::make_self_shared<hi::ConcurrentHighWayDebug<>>(
 		"ConcurrentHighWayDebug:monitor_and_repair_hungs",
 		std::move(logger),
-		std::chrono::milliseconds{10},
-		std::chrono::milliseconds{100});
+		10ms,
+		100ms);
 
 	hi::HighWaysMonitoring monitoring{100ms};
 	monitoring.add_for_monitoring(highway);
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
 	auto subscription_callback = hi::SubscriptionCallback<std::int32_t>::create(
-		[&](std::int32_t)
+		[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			std::this_thread::sleep_for(100ms);
 		},
@@ -232,11 +217,11 @@ void monitor_and_repair_hungs_concurrent_highway()
 
 int main(int /* argc */, char ** /* argv */)
 {
-	//    monitor_shortage_of_holders();
-	//	monitor_exception();
-	//	monitor_hungs();
-	//	monitor_debug();
-	//	monitor_and_repair_hungs();
+	monitor_shortage_of_holders();
+	monitor_exception();
+	monitor_hungs();
+	monitor_debug();
+	monitor_and_repair_hungs();
 	monitor_and_repair_hungs_concurrent_highway();
 
 	std::cout << "Tests finished" << std::endl;

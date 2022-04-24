@@ -37,8 +37,12 @@ public:
 	{
 	}
 
-	template <bool send_may_fail = true>
-	Subscription<Result> subscription()
+	Subscription<Result> subscription(bool send_may_fail = true) const
+	{
+		return send_may_fail ? subscription_send_may_fail() : subscription_send_may_blocked();
+	}
+
+	Subscription<Result> subscription_send_may_fail() const
 	{
 		struct SubscriptionProtectedHolderImpl : public Subscription<Result>::SubscriptionHolder
 		{
@@ -64,14 +68,43 @@ public:
 					},
 					__FILE__,
 					__LINE__);
-				if constexpr (send_may_fail)
-				{
-					return high_way_mail_box_->send_may_fail(std::move(message));
-				}
-				else
-				{
-					return high_way_mail_box_->send_may_blocked(std::move(message));
-				}
+				return high_way_mail_box_->send_may_fail(std::move(message));
+			}
+
+			const std::weak_ptr<ResultWaitFutureNode<Result>> self_weak_;
+			const IHighWayMailBoxPtr high_way_mail_box_;
+		};
+
+		return Subscription<Result>{new SubscriptionProtectedHolderImpl{self_weak_, high_way_mail_box_}};
+	}
+
+	Subscription<Result> subscription_send_may_blocked() const
+	{
+		struct SubscriptionProtectedHolderImpl : public Subscription<Result>::SubscriptionHolder
+		{
+			SubscriptionProtectedHolderImpl(
+				std::weak_ptr<ResultWaitFutureNode<Result>> self_weak,
+				IHighWayMailBoxPtr high_way_mail_box)
+				: self_weak_{std::move(self_weak)}
+				, high_way_mail_box_{std::move(high_way_mail_box)}
+			{
+			}
+
+			bool operator()(Result publication) override
+			{
+				auto message = hi::Runnable::create(
+					[publication = std::move(publication),
+					 self_weak = self_weak_](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
+					{
+						if (auto self = self_weak.lock())
+						{
+							self->publish_progress_state(false, 100);
+							self->set_result(std::move(publication));
+						}
+					},
+					__FILE__,
+					__LINE__);
+				return high_way_mail_box_->send_may_blocked(std::move(message));
 			}
 
 			const std::weak_ptr<ResultWaitFutureNode<Result>> self_weak_;

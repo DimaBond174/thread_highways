@@ -15,6 +15,8 @@ template <typename Publication>
 class PublishManyForMany : public IPublisher<Publication>
 {
 public:
+	typedef Publication PublicationType;
+
 	PublishManyForMany(std::weak_ptr<PublishManyForMany<Publication>> self_weak)
 		: self_weak_{std::move(self_weak)}
 	{

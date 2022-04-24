@@ -14,7 +14,7 @@ void common_test(
 	std::shared_ptr<hi::PublishOneForMany<std::uint32_t>> & publisher,
 	hi::ISubscribeHerePtr<std::uint32_t> subscribe_channel)
 {
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();
 
 	std::promise<std::uint32_t> promise;
@@ -39,7 +39,7 @@ void common_test(
 	};
 
 	auto subscription_callback = hi::SubscriptionCallback<std::uint32_t>::create(
-		[&](std::uint32_t publication)
+		[&](std::uint32_t publication, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			promise.set_value(publication);
 		},
@@ -134,7 +134,7 @@ void common_test(
 	std::shared_ptr<hi::PublishOneForMany<std::string>> & publisher,
 	hi::ISubscribeHerePtr<std::string> subscribe_channel)
 {
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();
 
 	std::promise<std::string> promise;
@@ -159,7 +159,7 @@ void common_test(
 	};
 
 	auto subscription_callback = hi::SubscriptionCallback<std::string>::create(
-		[&](std::string publication)
+		[&](std::string publication, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			promise.set_value(publication);
 		},

@@ -10,12 +10,12 @@
 
 void test_1()
 {
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto publisher = hi::make_self_shared<hi::PublishManyForMany<std::string>>();
 	auto highway_mailbox = highway->mailbox();
 
 	auto subscription_callback1 = hi::SubscriptionCallback<std::string>::create(
-		[](std::string publication)
+		[](std::string publication, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			std::cout << "test_1, publication = " << publication << std::endl;
 		},
@@ -26,7 +26,7 @@ void test_1()
 		hi::Subscription<std::string>::create(std::move(subscription_callback1), highway_mailbox));
 
 	auto subscription_callback2 = hi::SubscriptionCallback<std::string>::create(
-		[](std::string publication)
+		[](std::string publication, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			std::cout << "test_2, publication = " << publication << std::endl;
 		},

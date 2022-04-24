@@ -193,8 +193,12 @@ public:
 	{
 	}
 
-	template <bool send_may_fail = true>
-	Subscription<Parameter> subscription() const
+	Subscription<Parameter> subscription(bool send_may_fail = true) const
+	{
+		return send_may_fail ? subscription_send_may_fail() : subscription_send_may_blocked();
+	}
+
+	Subscription<Parameter> subscription_send_may_fail() const
 	{
 		struct SubscriptionProtectedHolderImpl : public Subscription<Parameter>::SubscriptionHolder
 		{
@@ -237,14 +241,62 @@ public:
 					},
 					future_node_logic_->get_code_filename(),
 					future_node_logic_->get_code_line());
-				if constexpr (send_may_fail)
+				return high_way_mail_box_->send_may_fail(std::move(message));
+			}
+
+			const FutureNodeWithProgressPublisherLogicPtr<Parameter, Result> future_node_logic_;
+			const IHighWayMailBoxPtr high_way_mail_box_;
+			const std::weak_ptr<FutureNodeWithProgressPublisher<Parameter, Result>> self_weak_;
+		};
+
+		return Subscription<Parameter>{
+			new SubscriptionProtectedHolderImpl{future_node_logic_, high_way_mail_box_, self_weak_}};
+	}
+
+	Subscription<Parameter> subscription_send_may_blocked() const
+	{
+		struct SubscriptionProtectedHolderImpl : public Subscription<Parameter>::SubscriptionHolder
+		{
+			SubscriptionProtectedHolderImpl(
+				FutureNodeWithProgressPublisherLogicPtr<Parameter, Result> future_node_logic,
+				IHighWayMailBoxPtr high_way_mail_box,
+				std::weak_ptr<FutureNodeWithProgressPublisher<Parameter, Result>> self_weak)
+				: future_node_logic_{std::move(future_node_logic)}
+				, high_way_mail_box_{std::move(high_way_mail_box)}
+				, self_weak_{std::move(self_weak)}
+			{
+			}
+
+			bool operator()(Parameter publication) override
+			{
+				if (!future_node_logic_->alive())
 				{
-					return high_way_mail_box_->send_may_fail(std::move(message));
+					return false;
 				}
-				else
-				{
-					return high_way_mail_box_->send_may_blocked(std::move(message));
-				}
+
+				auto message = Runnable::create(
+					[subscription_callback = future_node_logic_,
+					 publication = std::move(publication),
+					 self_weak = self_weak_](
+						const std::atomic<std::uint32_t> & global_run_id,
+						const std::uint32_t your_run_id) mutable
+					{
+						subscription_callback->send(
+							std::move(publication),
+							[self_weak](bool in_progress, std::uint16_t achieved_progress)
+							{
+								safe_invoke_void(
+									&INode::publish_progress_state,
+									self_weak,
+									in_progress,
+									achieved_progress);
+							},
+							global_run_id,
+							your_run_id);
+					},
+					future_node_logic_->get_code_filename(),
+					future_node_logic_->get_code_line());
+				return high_way_mail_box_->send_may_blocked(std::move(message));
 			}
 
 			const FutureNodeWithProgressPublisherLogicPtr<Parameter, Result> future_node_logic_;

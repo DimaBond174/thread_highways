@@ -11,14 +11,12 @@ using namespace std::chrono_literals;
 
 void serial_schedule()
 {
-	auto logger = std::make_shared<hi::ErrorLogger>(
-		[](std::string err)
+	auto logger = hi::create_default_logger(
+		[](const std::string & err)
 		{
 			std::cout << err << std::endl;
 		});
-	auto highway = hi::make_self_shared<hi::SerialHighWayWithScheduler>(
-		std::nullopt,
-		nullptr,
+	auto highway = hi::make_self_shared<hi::SerialHighWayWithScheduler<>>(
 		"SerialHighWay:serial_schedule",
 		std::move(logger),
 		std::chrono::milliseconds{10},

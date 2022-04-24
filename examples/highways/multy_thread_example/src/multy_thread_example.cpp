@@ -9,62 +9,23 @@
 
 using namespace std::chrono_literals;
 
-void monitor_shortage_of_holders()
-{
-	// todo на 2-3 хайвея по кругу
-	//	auto logger = std::make_shared<hi::ErrorLogger>(
-	//			[ ](std::string err)
-	//			{
-	//				std::cout << err << std::endl;
-	//			});
-	//	auto highway = hi::make_self_shared<hi::SerialHighWay>(std::nullopt, nullptr,
-	//"SerialHighWay:monitor_shortage_of_holders", std::move(logger)); 	highway->set_capacity(1);
-
-	//	//hi::HighWaysMonitoring monitoring{100ms};
-	//	//monitoring.add_for_monitoring(highway);
-
-	//	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::uint32_t>>();
-	//	auto subscription_callback = hi::SubscriptionCallback<std::uint32_t>::create(
-	//		[&](std::uint32_t )
-	//		{
-	//			//std::this_thread::sleep_for(100ms);
-	//		}, highway->protector(), __FILE__, __LINE__);
-	//	publisher->subscribe_channel()->subscribe(hi::Subscription<std::uint32_t>::create(std::move(subscription_callback),
-	//highway->mailbox()));
-
-	//	for (std::uint32_t i = 0; i < 1000; ++i)
-	//	{
-	//		publisher->publish(i);
-	//	}
-
-	//	highway->destroy();
-} // monitor_shortage_of_holders()
-
 void increase_decrease_workers()
 {
-	auto logger = std::make_shared<hi::ErrorLogger>(
+	auto logger = hi::create_default_logger(
 		[](std::string err)
 		{
 			std::cout << err << std::endl;
 		});
 
-	// auto highway = hi::make_self_shared<hi::ConcurrentHighWay>(std::nullopt, nullptr,
-	// "ConcurrentHighWayDebug:monitor_and_repair_hungs", std::move(logger), std::chrono::milliseconds{10},
-	// std::chrono::milliseconds{100});
-	auto highway = hi::make_self_shared<hi::ConcurrentHighWayDebug>(
-		std::nullopt,
-		nullptr,
-		"ConcurrentHighWayDebug:monitor_and_repair_hungs",
+	auto highway = hi::make_self_shared<hi::ConcurrentHighWayDebug<>>(
+		"ConcurrentHighWayDebug:increase_decrease_workers",
 		std::move(logger),
 		std::chrono::milliseconds{10},
 		std::chrono::milliseconds{100});
 
-	// hi::HighWaysMonitoring monitoring{100ms};
-	// monitoring.add_for_monitoring(highway);
-
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
 	auto subscription_callback = hi::SubscriptionCallback<std::int32_t>::create(
-		[&](std::int32_t i)
+		[&](std::int32_t i, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			std::this_thread::sleep_for(10ms);
 			std::cout << "\nmessage:" << i << std::endl;

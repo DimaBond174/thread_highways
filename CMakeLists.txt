@@ -12,10 +12,10 @@ target_include_directories(${LIB_NAME}
   include/
 )
 
-set_target_properties(${LIB_NAME} PROPERTIES
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-)
+#set_target_properties(${LIB_NAME} PROPERTIES
+#    CXX_STANDARD 17
+#    CXX_STANDARD_REQUIRED ON
+#)
 
 if(BUILD_TESTING)
     message(STATUS "building thread_highways examples..")

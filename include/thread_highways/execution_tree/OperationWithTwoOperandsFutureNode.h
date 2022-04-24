@@ -170,7 +170,7 @@ public:
 	void add_operand1_channel(ISubscribeHere<Operand1> & where_to_subscribe)
 	{
 		auto subscription_callback = hi::SubscriptionCallback<Operand1>::create(
-			[this](Operand1 operand1) mutable
+			[this](Operand1 operand1, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
 			{
 				if (!operand2_)
 				{
@@ -194,7 +194,7 @@ public:
 	void add_operand2_channel(ISubscribeHere<Operand2> & where_to_subscribe)
 	{
 		auto subscription_callback = hi::SubscriptionCallback<Operand2>::create(
-			[this](Operand2 operand2) mutable
+			[this](Operand2 operand2, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
 			{
 				if (!operand1_)
 				{

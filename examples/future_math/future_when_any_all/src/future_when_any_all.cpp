@@ -10,7 +10,7 @@
 
 void test_when_all()
 {
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();
 
 	struct AggregatingBundle
@@ -57,7 +57,7 @@ void test_when_all()
 
 	// подписываемся на результат
 	auto subscription_callback = hi::SubscriptionCallback<std::string>::create(
-		[&](std::string publication) mutable
+		[&](std::string publication, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
 		{
 			std::cout << "received message: " << publication << std::endl;
 		},
@@ -91,7 +91,7 @@ void test_when_all()
 
 void test_when_any()
 {
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();
 
 	struct AggregatingBundle
@@ -129,7 +129,7 @@ void test_when_any()
 
 	// подписываемся на результат
 	auto subscription_callback = hi::SubscriptionCallback<std::string>::create(
-		[&](std::string publication) mutable
+		[&](std::string publication, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
 		{
 			std::cout << "received message: " << publication << std::endl;
 		},

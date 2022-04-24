@@ -10,10 +10,18 @@
 
 void test_1()
 {
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
+
+	highway->mailbox()->send_may_blocked(hi::Runnable::create(
+		[](const std::atomic<std::uint32_t> &, const std::uint32_t)
+		{
+			hi::set_this_thread_name("highway");
+		},
+		__FILE__,
+		__LINE__));
 
 	auto subscription_callback = hi::SubscriptionCallback<std::string>::create(
-		[](std::string publication)
+		[](std::string publication, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			std::cout << "test_1, publication = " << publication << std::endl;
 		},
@@ -26,6 +34,7 @@ void test_1()
 
 	std::thread thread1{[&]
 						{
+							hi::set_this_thread_name("thread1");
 							for (int i = 0; i <= 100; ++i)
 							{
 								publisher.publish(std::string("thread1:").append(std::to_string(i)));
@@ -33,6 +42,7 @@ void test_1()
 						}};
 	std::thread thread2{[&]
 						{
+							hi::set_this_thread_name("thread2");
 							for (int i = 0; i <= 100; ++i)
 							{
 								publisher.publish(std::string("thread2:").append(std::to_string(i)));
@@ -40,6 +50,7 @@ void test_1()
 						}};
 	std::thread thread3{[&]
 						{
+							hi::set_this_thread_name("thread3");
 							for (int i = 0; i <= 100; ++i)
 							{
 								publisher.publish(std::string("thread3:").append(std::to_string(i)));

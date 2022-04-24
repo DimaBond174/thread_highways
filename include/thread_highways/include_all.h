@@ -23,12 +23,17 @@
 
 #include <thread_highways/highways/ConcurrentHighWay.h>
 #include <thread_highways/highways/ConcurrentHighWayDebug.h>
+#include <thread_highways/highways/FreeTimeLogic.h>
 #include <thread_highways/highways/HighWaysMonitoring.h>
 #include <thread_highways/highways/SerialHighWay.h>
 #include <thread_highways/highways/SerialHighWayDebug.h>
 #include <thread_highways/highways/SerialHighWayWithScheduler.h>
+#include <thread_highways/highways/SingleThreadHighWay.h>
+#include <thread_highways/highways/SingleThreadHighWayWithScheduler.h>
 #include <thread_highways/mailboxes/MailBox.h>
 
 #include <thread_highways/tools/make_self_shared.h>
+#include <thread_highways/tools/os/system_switch.h>
+#include <thread_highways/tools/small_tools.h>
 
 #endif // THREAD_HIGHWAYS_H

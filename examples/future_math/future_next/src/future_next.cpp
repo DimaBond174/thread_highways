@@ -10,7 +10,7 @@
 
 void test_1()
 {
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();
 
 	auto future_node_logic = hi::FutureNodeLogic<std::int32_t, std::int32_t>::create(
@@ -30,7 +30,7 @@ void test_1()
 	std::promise<bool> future_result;
 	auto future_result_ready = future_result.get_future();
 	auto subscription_callback = hi::SubscriptionCallback<std::int32_t>::create(
-		[&](std::int32_t publication) mutable
+		[&](std::int32_t publication, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
 		{
 			std::cout << "future result = " << publication << std::endl;
 			future_result.set_value(true);
@@ -100,20 +100,20 @@ void test_2_offline_online_route()
 		{
 		}
 
-		void on_online_route(std::string route)
+		void on_online_route(std::string route, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			online_route_was_sent_ = true;
 			out_future_result_publisher_->publish(std::move(route));
 		}
 
-		void on_offline_route(std::string route)
+		void on_offline_route(std::string route, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			if (online_route_was_sent_)
 				return;
 			out_future_result_publisher_->publish(std::move(route));
 		}
 
-		void reset(bool)
+		void reset(bool, const std::atomic<std::uint32_t> &, const std::uint32_t)
 		{
 			online_route_was_sent_ = false;
 		}
@@ -126,13 +126,13 @@ void test_2_offline_online_route()
 		bool online_route_was_sent_{false};
 	}; // FutureSendOnlineOrOffline
 
-	auto highway = hi::make_self_shared<hi::SerialHighWay>();
+	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();
 	auto route_switch_node = hi::make_self_shared<FutureSendOnlineOrOffline>(highway_mailbox);
 
 	route_switch_node->out_future_result_publisher_->subscribe(hi::Subscription<std::string>::create(
 		hi::SubscriptionCallback<std::string>::create(
-			[&](std::string route) mutable
+			[&](std::string route, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
 			{
 				std::cout << "future result route = " << route << std::endl;
 			},
