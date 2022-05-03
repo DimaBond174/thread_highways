@@ -178,54 +178,82 @@ TYPED_TEST(TestLackOfHolders, TwoHighwaysWithPublishers)
 	highway1->set_capacity(2);
 	highway2->set_capacity(2);
 
-	hi::subscribe(
-		publisher1->subscribe_channel(),
-		highway2,
+	publisher1->subscribe(
 		[&](std::shared_ptr<Message> message)
 		{
 			EXPECT_TRUE(highway2->current_execution_on_this_highway());
 			message->message_loop_id_++;
 			publisher2->publish(std::move(message));
 		},
+		highway2->protector_for_tests_only(),
+		highway2->mailbox(),
 		false,
 		__FILE__,
 		__LINE__);
+	//	hi::subscribe(
+	//		publisher1->subscribe_channel(),
+	//		highway2,
+	//		[&](std::shared_ptr<Message> message)
+	//		{
+	//			EXPECT_TRUE(highway2->current_execution_on_this_highway());
+	//			message->message_loop_id_++;
+	//			publisher2->publish(std::move(message));
+	//		},
+	//		false,
+	//		__FILE__,
+	//		__LINE__);
 
-	hi::subscribe(
-		publisher2->subscribe_channel(),
-		highway1,
+	publisher2->subscribe(
 		[&](std::shared_ptr<Message> message,
 			const std::atomic<std::uint32_t> & global_run_id,
 			const std::uint32_t your_run_id)
 		{
-			// hi::subscrube может принимать на исполнение длительные задачи в которых необходимо
-			// уметь мониторить сигнал об остановке хайвея (когда global_run_id != your_run_id)
 			EXPECT_EQ(global_run_id, your_run_id);
 			EXPECT_TRUE(highway1->current_execution_on_this_highway());
 			std::this_thread::sleep_for(std::chrono::milliseconds{10});
 			message->message_loop_id_++;
 			publisher1->publish(std::move(message));
 		},
+		highway1->protector_for_tests_only(),
+		highway1->mailbox(),
 		false,
 		__FILE__,
 		__LINE__);
+	//	hi::subscribe(
+	//		publisher2->subscribe_channel(),
+	//		highway1,
+	//		[&](std::shared_ptr<Message> message,
+	//			const std::atomic<std::uint32_t> & global_run_id,
+	//			const std::uint32_t your_run_id)
+	//		{
+	//			// hi::subscrube может принимать на исполнение длительные задачи в которых необходимо
+	//			// уметь мониторить сигнал об остановке хайвея (когда global_run_id != your_run_id)
+	//			EXPECT_EQ(global_run_id, your_run_id);
+	//			EXPECT_TRUE(highway1->current_execution_on_this_highway());
+	//			std::this_thread::sleep_for(std::chrono::milliseconds{10});
+	//			message->message_loop_id_++;
+	//			publisher1->publish(std::move(message));
+	//		},
+	//		false,
+	//		__FILE__,
+	//		__LINE__);
 
 	// Запускаем цикл
 	hi::execute(
-		highway1,
 		[&](const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id)
 		{
 			// hi::execute может принимать на исполнение длительные задачи в которых необходимо
 			// уметь мониторить сигнал об остановке хайвея (когда global_run_id != your_run_id)
 			EXPECT_EQ(global_run_id, your_run_id);
 			publisher1->publish(std::move(message1));
-		});
+		},
+		highway1);
 	hi::execute(
-		highway2,
 		[&]
 		{
 			publisher2->publish(std::move(message2));
-		});
+		},
+		highway2);
 
 	// Если произойдёт дедлок, то это ожидание будет вечным
 	std::uint32_t expected_count{100};

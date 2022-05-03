@@ -12,28 +12,25 @@
 namespace hi
 {
 
-/*
-Ничего никуда уже не шлёт, но позволяет дождаться результата
-и хранит результат
+/*!
+ Узел ничего никуда уже не шлёт, ничего не делает.
+ Позволяет подписаться на результат, дождаться результата
+	и хранить результат.
+ Дополнительно оказалось удобным в этом же узле сохранить execution tree
+ через store_parent_execution_tree чтобы и результат и алгоритм получения результата были в одном объекте.
 */
 template <typename Result>
 class ResultWaitFutureNode : public INode
 {
 public:
-	ResultWaitFutureNode(std::weak_ptr<ResultWaitFutureNode<Result>> self_weak, IHighWayMailBoxPtr high_way_mail_box)
-		: self_weak_{std::move(self_weak)}
-		, high_way_mail_box_{std::move(high_way_mail_box)}
-	{
-	}
-
 	ResultWaitFutureNode(
 		std::weak_ptr<ResultWaitFutureNode<Result>> self_weak,
-		IHighWayMailBoxPtr high_way_mail_box,
-		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher,
-		std::uint32_t node_id)
+		IHighWayMailBoxPtr highway_mailbox,
+		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher = nullptr,
+		std::uint32_t node_id = 0)
 		: INode(std::move(current_executed_node_publisher), node_id)
 		, self_weak_{std::move(self_weak)}
-		, high_way_mail_box_{std::move(high_way_mail_box)}
+		, highway_mailbox_{std::move(highway_mailbox)}
 	{
 	}
 
@@ -48,9 +45,9 @@ public:
 		{
 			SubscriptionProtectedHolderImpl(
 				std::weak_ptr<ResultWaitFutureNode<Result>> self_weak,
-				IHighWayMailBoxPtr high_way_mail_box)
+				IHighWayMailBoxPtr highway_mailbox)
 				: self_weak_{std::move(self_weak)}
-				, high_way_mail_box_{std::move(high_way_mail_box)}
+				, highway_mailbox_{std::move(highway_mailbox)}
 			{
 			}
 
@@ -68,14 +65,14 @@ public:
 					},
 					__FILE__,
 					__LINE__);
-				return high_way_mail_box_->send_may_fail(std::move(message));
+				return highway_mailbox_->send_may_fail(std::move(message));
 			}
 
 			const std::weak_ptr<ResultWaitFutureNode<Result>> self_weak_;
-			const IHighWayMailBoxPtr high_way_mail_box_;
+			const IHighWayMailBoxPtr highway_mailbox_;
 		};
 
-		return Subscription<Result>{new SubscriptionProtectedHolderImpl{self_weak_, high_way_mail_box_}};
+		return Subscription<Result>{new SubscriptionProtectedHolderImpl{self_weak_, highway_mailbox_}};
 	}
 
 	Subscription<Result> subscription_send_may_blocked() const
@@ -84,9 +81,9 @@ public:
 		{
 			SubscriptionProtectedHolderImpl(
 				std::weak_ptr<ResultWaitFutureNode<Result>> self_weak,
-				IHighWayMailBoxPtr high_way_mail_box)
+				IHighWayMailBoxPtr highway_mailbox)
 				: self_weak_{std::move(self_weak)}
-				, high_way_mail_box_{std::move(high_way_mail_box)}
+				, highway_mailbox_{std::move(highway_mailbox)}
 			{
 			}
 
@@ -104,14 +101,14 @@ public:
 					},
 					__FILE__,
 					__LINE__);
-				return high_way_mail_box_->send_may_blocked(std::move(message));
+				return highway_mailbox_->send_may_blocked(std::move(message));
 			}
 
 			const std::weak_ptr<ResultWaitFutureNode<Result>> self_weak_;
-			const IHighWayMailBoxPtr high_way_mail_box_;
+			const IHighWayMailBoxPtr highway_mailbox_;
 		};
 
-		return Subscription<Result>{new SubscriptionProtectedHolderImpl{self_weak_, high_way_mail_box_}};
+		return Subscription<Result>{new SubscriptionProtectedHolderImpl{self_weak_, highway_mailbox_}};
 	}
 
 	bool result_ready()
@@ -161,7 +158,7 @@ private:
 
 private:
 	const std::weak_ptr<ResultWaitFutureNode<Result>> self_weak_;
-	IHighWayMailBoxPtr high_way_mail_box_;
+	const IHighWayMailBoxPtr highway_mailbox_;
 
 	std::mutex mutex_;
 	std::condition_variable cv_;

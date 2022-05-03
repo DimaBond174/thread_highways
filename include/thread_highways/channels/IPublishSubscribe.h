@@ -32,11 +32,23 @@ public:
 			}
 
 			void operator()(
-				Publication publication,
-				const std::atomic<std::uint32_t> & global_run_id,
-				const std::uint32_t your_run_id) override
+				[[maybe_unused]] Publication publication,
+				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
+				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				safe_invoke_void(callback_, protector_, std::move(publication), global_run_id, your_run_id);
+				if constexpr (
+					std::is_invocable_v<R, Publication, const std::atomic<std::uint32_t> &, const std::uint32_t>)
+				{
+					safe_invoke_void(callback_, protector_, std::move(publication), global_run_id, your_run_id);
+				}
+				else if constexpr (std::is_invocable_v<R, Publication>)
+				{
+					safe_invoke_void(callback_, protector_, std::move(publication));
+				}
+				else
+				{
+					safe_invoke_void(callback_, protector_);
+				}
 			}
 
 			[[nodiscard]] bool alive() override
@@ -134,7 +146,7 @@ template <typename Publication>
 class Subscription
 {
 public:
-	/*
+	/*!
 	 Фабрика подписок
 	 @subscription_callback - куда передавать публикацию,нужен в shared_ptr т.к. постоянно копируется в Runnable
 	 @highway_mail_box - куда постится Runnable(с захваченной публикацией и subscription_callback) для обработки
@@ -147,12 +159,30 @@ public:
 	*/
 	static Subscription create(
 		SubscriptionCallbackPtr<Publication> subscription_callback,
-		IHighWayMailBoxPtr highway_mail_box,
+		IHighWayMailBoxPtr highway_mailbox,
 		bool send_may_fail = true)
 	{
-		return send_may_fail ? create_send_may_fail(std::move(subscription_callback), std::move(highway_mail_box))
-							 : create_send_may_blocked(std::move(subscription_callback), std::move(highway_mail_box));
+		return send_may_fail ? create_send_may_fail(std::move(subscription_callback), std::move(highway_mailbox))
+							 : create_send_may_blocked(std::move(subscription_callback), std::move(highway_mailbox));
 	}
+
+	template <typename R, typename P>
+	static Subscription create(
+		R && callback,
+		P protector,
+		IHighWayMailBoxPtr highway_mailbox,
+		bool send_may_fail = true,
+		std::string filename = __FILE__,
+		const unsigned int line = __LINE__)
+	{
+		auto subscription_callback = SubscriptionCallback<Publication>::template create<R, P>(
+			std::move(callback),
+			std::move(protector),
+			std::move(filename),
+			line);
+
+		return create(std::move(subscription_callback), std::move(highway_mailbox), send_may_fail);
+	} // create
 
 	static Subscription create_send_may_fail(
 		SubscriptionCallbackPtr<Publication> subscription_callback,
@@ -314,108 +344,68 @@ struct IPublisher
 template <typename Publication>
 using IPublisherPtr = std::shared_ptr<IPublisher<Publication>>;
 
-/*
+/*!
 	Обобщающая функция создания подписки
-	@subscribe_channel - канал на который следует подписаться
-	@highway - экзекутор на котором должен выполняться код колбэка
-	@callback - колбэк обработчика публикации
-	@send_may_fail - можно пропустить отправку если на хайвее подписчика закончились холдеры сообщений
-	@filename, @line - координаты кода для отладки
-*/
-template <typename Publication, typename R>
-void subscribe(
-	ISubscribeHerePtr<Publication> subscribe_channel,
-	std::shared_ptr<IHighWay> highway,
-	R && callback,
-	bool send_may_fail = true,
-	std::string filename = __FILE__,
-	unsigned int line = __LINE__)
-{
-	struct RunnableHolder
-	{
-		RunnableHolder(R && r)
-			: r_{std::move(r)}
-		{
-		}
-
-		void operator()(
-			Publication publication,
-			[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
-			[[maybe_unused]] const std::uint32_t your_run_id)
-		{
-			if constexpr (std::is_invocable_v<R, Publication, const std::atomic<std::uint32_t> &, const std::uint32_t>)
-			{
-				r_(publication, global_run_id, your_run_id);
-			}
-			else
-			{
-				r_(publication);
-			}
-		}
-
-		R r_;
-	};
-
-	auto subscription_callback = hi::SubscriptionCallback<Publication>::create(
-		RunnableHolder{std::move(callback)},
-		highway->protector(),
-		filename,
-		line);
-	subscribe_channel->subscribe(
-		hi::Subscription<Publication>::create(std::move(subscription_callback), highway->mailbox(), send_may_fail));
-}
-
-/*
-	Обобщающая функция создания подписки
-	@subscribe_channel - канал на который следует подписаться
-	@highway - экзекутор на котором должен выполняться код колбэка
-	@callback - колбэк обработчика публикации
-	@custom_protector - защита подписки (способ прекратить подписку)
-	@send_may_fail - можно пропустить отправку если на хайвее подписчика закончились холдеры сообщений
-	@filename, @line - координаты кода для отладки
+	@param subscribe_channel - канал на который следует подписаться
+	@param callback - колбэк обработчика публикации
+	@param protector - защита подписки (способ прекратить подписку)
+	@param highway - экзекутор на котором должен выполняться код колбэка
+	@param send_may_fail - можно пропустить отправку если на хайвее подписчика закончились холдеры сообщений
+	@param filename - координаты кода для отладки
+	@param line - координаты кода для отладки
 */
 template <typename Publication, typename R, typename P>
-void subscribe_with_custom_protector(
-	ISubscribeHerePtr<Publication> subscribe_channel,
-	std::shared_ptr<IHighWay> highway,
+void subscribe(
+	ISubscribeHere<Publication> & subscribe_channel,
 	R && callback,
-	P && custom_protector,
-	bool send_may_fail = true,
+	P protector,
+	IHighWayMailBoxPtr highway_mailbox,
+	const bool send_may_fail = true,
 	std::string filename = __FILE__,
-	unsigned int line = __LINE__)
+	const unsigned int line = __LINE__)
 {
-	struct RunnableHolder
-	{
-		RunnableHolder(R && r)
-			: r_{std::move(r)}
-		{
-		}
+	subscribe_channel.subscribe(hi::Subscription<Publication>::create(
+		std::move(callback),
+		std::move(protector),
+		std::move(highway_mailbox),
+		send_may_fail,
+		std::move(filename),
+		line));
 
-		void operator()(
-			Publication publication,
-			[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
-			[[maybe_unused]] const std::uint32_t your_run_id)
-		{
-			if constexpr (std::is_invocable_v<R, Publication, const std::atomic<std::uint32_t> &, const std::uint32_t>)
-			{
-				r_(publication, global_run_id, your_run_id);
-			}
-			else
-			{
-				r_(publication);
-			}
-		}
+	//	struct RunnableHolder
+	//	{
+	//		RunnableHolder(R && r)
+	//			: r_{std::move(r)}
+	//		{
+	//		}
 
-		R r_;
-	};
+	//		void operator()(
+	//			Publication publication,
+	//			[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
+	//			[[maybe_unused]] const std::uint32_t your_run_id)
+	//		{
+	//			if constexpr (std::is_invocable_v<R, Publication, const std::atomic<std::uint32_t> &, const
+	//std::uint32_t>)
+	//			{
+	//				r_(publication, global_run_id, your_run_id);
+	//			}
+	//			else
+	//			{
+	//				r_(publication);
+	//			}
+	//		}
 
-	auto subscription_callback = hi::SubscriptionCallback<Publication>::create(
-		RunnableHolder{std::move(callback)},
-		std::move(custom_protector),
-		filename,
-		line);
-	subscribe_channel->subscribe(
-		hi::Subscription<Publication>::create(std::move(subscription_callback), highway->mailbox(), send_may_fail));
+	//		R r_;
+	//	};
+
+	//	auto subscription_callback = hi::SubscriptionCallback<Publication>::create(
+	//		RunnableHolder{std::move(callback)},
+	//		std::move(protector),
+	//		std::move(filename),
+	//		line);
+	//	subscribe_channel.subscribe(
+	//		hi::Subscription<Publication>::create(std::move(subscription_callback), std::move(highway_mailbox),
+	//send_may_fail));
 }
 
 } // namespace hi

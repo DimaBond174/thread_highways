@@ -146,12 +146,13 @@ TYPED_TEST(TestHighwayPauseLifecycle, ThreadsOnPauseAndMonitoringToo)
 			auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
 
 			hi::subscribe(
-				publisher->subscribe_channel(),
-				highway,
+				*publisher->subscribe_channel(),
 				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 				{
 					threads_online = true;
-				});
+				},
+				highway->protector_for_tests_only(),
+				highway->mailbox());
 
 			publisher->publish(0); // 1 normal publish
 			std::this_thread::sleep_for(std::chrono::milliseconds{10});

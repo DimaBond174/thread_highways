@@ -2,6 +2,7 @@
 #define AGGREGATINGFUTURENODE_H
 
 #include <thread_highways/channels/IPublishSubscribe.h>
+#include <thread_highways/channels/PublishManyForMany.h>
 #include <thread_highways/channels/PublishOneForMany.h>
 #include <thread_highways/execution_tree/INode.h>
 #include <thread_highways/tools/make_self_shared.h>
@@ -22,7 +23,8 @@ public:
 		R && callback,
 		P protector,
 		std::string filename,
-		unsigned int line)
+		unsigned int line,
+		std::shared_ptr<IPublisher<Result>> future_result_publisher)
 	{
 		struct AggregatingFutureNodeLogicProtectedHolderImpl : public AggregatingFutureNodeLogicHolder
 		{
@@ -33,20 +35,94 @@ public:
 			}
 
 			void operator()(
-				std::uint32_t operand_id,
+				const std::uint32_t operand_id,
 				Operand operand_value,
 				AggregatingBundle & aggregating_bundle,
-				std::uint32_t operands_count,
-				IPublisher<Result> & result_publisher) override
+				[[maybe_unused]] IPublisher<Result> & result_publisher,
+				[[maybe_unused]] const std::uint32_t operands_count,
+				[[maybe_unused]] INode & node,
+				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
+				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				safe_invoke_void(
-					callback_,
-					protector_,
-					operand_id,
-					std::move(operand_value),
-					aggregating_bundle,
-					operands_count,
-					result_publisher);
+				if constexpr (std::is_invocable_v<
+								  R,
+								  std::uint32_t,
+								  Operand,
+								  AggregatingBundle &,
+								  IPublisher<Result> &,
+								  std::uint32_t,
+								  INode &,
+								  const std::atomic<std::uint32_t> &,
+								  const std::uint32_t>)
+				{
+					safe_invoke_void(
+						callback_,
+						protector_,
+						operand_id,
+						std::move(operand_value),
+						aggregating_bundle,
+						result_publisher,
+						operands_count,
+						node,
+						global_run_id,
+						your_run_id);
+				}
+				else if constexpr (std::is_invocable_v<
+									   R,
+									   std::uint32_t,
+									   Operand,
+									   AggregatingBundle &,
+									   IPublisher<Result> &,
+									   std::uint32_t,
+									   INode &>)
+				{
+					safe_invoke_void(
+						callback_,
+						protector_,
+						operand_id,
+						std::move(operand_value),
+						aggregating_bundle,
+						result_publisher,
+						operands_count,
+						node);
+				}
+				else if constexpr (std::is_invocable_v<
+									   R,
+									   std::uint32_t,
+									   Operand,
+									   AggregatingBundle &,
+									   IPublisher<Result> &,
+									   std::uint32_t>)
+				{
+					safe_invoke_void(
+						callback_,
+						protector_,
+						operand_id,
+						std::move(operand_value),
+						aggregating_bundle,
+						result_publisher,
+						operands_count);
+				}
+				else if constexpr (
+					std::is_invocable_v<R, std::uint32_t, Operand, AggregatingBundle &, IPublisher<Result> &>)
+				{
+					safe_invoke_void(
+						callback_,
+						protector_,
+						operand_id,
+						std::move(operand_value),
+						aggregating_bundle,
+						result_publisher);
+				}
+				else if constexpr (std::is_invocable_v<R, std::uint32_t, Operand, AggregatingBundle &>)
+				{
+					safe_invoke_void(callback_, protector_, operand_id, std::move(operand_value), aggregating_bundle);
+				}
+				else
+				{
+					// The callback signature must be one of the above
+					assert(false);
+				}
 			}
 
 			[[nodiscard]] bool alive() override
@@ -64,7 +140,8 @@ public:
 		return std::make_shared<AggregatingFutureNodeLogic<Operand, AggregatingBundle, Result>>(
 			new AggregatingFutureNodeLogicProtectedHolderImpl{std::move(callback), std::move(protector)},
 			std::move(filename),
-			line);
+			line,
+			std::move(future_result_publisher));
 	}
 
 	~AggregatingFutureNodeLogic()
@@ -97,14 +174,20 @@ public:
 		const std::uint32_t operand_id,
 		Operand operand_value,
 		AggregatingBundle & aggregating_bundle,
-		const std::uint32_t operands_count) const
+		const std::uint32_t operands_count,
+		INode & node,
+		const std::atomic<std::uint32_t> & global_run_id,
+		const std::uint32_t your_run_id) const
 	{
 		(*subscription_callback_holder_)(
 			operand_id,
 			std::move(operand_value),
 			aggregating_bundle,
+			*future_result_publisher_,
 			operands_count,
-			*future_result_publisher_);
+			node,
+			global_run_id,
+			your_run_id);
 	}
 
 	bool alive()
@@ -124,29 +207,41 @@ public:
 
 	ISubscribeHerePtr<Result> subscribe_result_channel()
 	{
-		return future_result_publisher_->subscribe_channel();
+		if (auto it = std::dynamic_pointer_cast<PublishManyForMany<Result>>(future_result_publisher_))
+		{
+			return it->subscribe_channel();
+		}
+		if (auto it = std::dynamic_pointer_cast<PublishOneForMany<Result>>(future_result_publisher_))
+		{
+			return it->subscribe_channel();
+		}
+		return nullptr;
 	}
 
 	struct AggregatingFutureNodeLogicHolder
 	{
 		virtual ~AggregatingFutureNodeLogicHolder() = default;
 		virtual void operator()(
-			std::uint32_t operand_id,
+			const std::uint32_t operand_id,
 			Operand operand_value,
 			AggregatingBundle & aggregating_bundle,
-			std::uint32_t operands_count,
-			IPublisher<Result> & result_publisher) = 0;
+			IPublisher<Result> & result_publisher,
+			const std::uint32_t operands_count,
+			INode & node,
+			const std::atomic<std::uint32_t> & global_run_id,
+			const std::uint32_t your_run_id) = 0;
 		[[nodiscard]] virtual bool alive() = 0;
 	};
 
 	AggregatingFutureNodeLogic(
 		AggregatingFutureNodeLogicHolder * subscription_holder,
 		std::string filename,
-		unsigned int line)
+		unsigned int line,
+		std::shared_ptr<IPublisher<Result>> future_result_publisher)
 		: filename_{std::move(filename)}
 		, line_{line}
 		, subscription_callback_holder_{subscription_holder}
-		, future_result_publisher_{make_self_shared<PublishOneForMany<Result>>()}
+		, future_result_publisher_{std::move(future_result_publisher)}
 	{
 		assert(subscription_callback_holder_);
 		assert(future_result_publisher_);
@@ -156,13 +251,12 @@ private:
 	std::string filename_;
 	unsigned int line_;
 	AggregatingFutureNodeLogicHolder * subscription_callback_holder_;
-	std::shared_ptr<PublishOneForMany<Result>> future_result_publisher_;
+	std::shared_ptr<IPublisher<Result>> future_result_publisher_;
 }; // AggregatingFutureNodeLogic
 
 template <typename Operand, typename AggregatingBundle, typename Result>
 using AggregatingFutureNodeLogicPtr = std::shared_ptr<AggregatingFutureNodeLogic<Operand, AggregatingBundle, Result>>;
 
-// todo сделать вариант для корутин где AggregatingBundle будет внутри корутины
 template <typename Operand, typename AggregatingBundle, typename Result>
 class AggregatingFutureNode : public INode
 {
@@ -170,71 +264,90 @@ public:
 	AggregatingFutureNode(
 		std::weak_ptr<AggregatingFutureNode<Operand, AggregatingBundle, Result>> self_weak,
 		AggregatingFutureNodeLogicPtr<Operand, AggregatingBundle, Result> future_node_logic,
-		IHighWayMailBoxPtr high_way_mail_box)
-		: self_weak_{std::move(self_weak)}
-		, future_node_logic_{std::move(future_node_logic)}
-		, high_way_mail_box_{std::move(high_way_mail_box)}
-	{
-	}
-
-	AggregatingFutureNode(
-		std::weak_ptr<AggregatingFutureNode<Operand, AggregatingBundle, Result>> self_weak,
-		AggregatingFutureNodeLogicPtr<Operand, AggregatingBundle, Result> future_node_logic,
-		IHighWayMailBoxPtr high_way_mail_box,
-		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher,
-		std::uint32_t node_id)
+		IHighWayMailBoxPtr highway_mailbox,
+		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher = nullptr,
+		std::uint32_t node_id = 0)
 		: INode(std::move(current_executed_node_publisher), node_id)
 		, self_weak_{std::move(self_weak)}
 		, future_node_logic_{std::move(future_node_logic)}
-		, high_way_mail_box_{std::move(high_way_mail_box)}
+		, highway_mailbox_{std::move(highway_mailbox)}
 	{
 	}
 
-	AggregatingFutureNode(
-		std::weak_ptr<AggregatingFutureNode<Operand, AggregatingBundle, Result>> self_weak,
-		AggregatingFutureNodeLogicPtr<Operand, AggregatingBundle, Result> future_node_logic,
-		AggregatingBundle && aggregating_bundle,
-		IHighWayMailBoxPtr high_way_mail_box)
-		: self_weak_{std::move(self_weak)}
-		, future_node_logic_{std::move(future_node_logic)}
-		, high_way_mail_box_{std::move(high_way_mail_box)}
-		, aggregating_bundle_{std::move(aggregating_bundle)}
+	/*!
+	 * Фабрика создания узла AggregatingFutureNode
+	 * @param callback - логика обработки
+	 * @param protector - защита callback-а чтобы он вызывался только пока в этом ещё есть смысл
+	 * (Например: если в callback обрабатываются поля объекта, то имеет смысл захватить std::weak_ptr на этот объект)
+	 * @param highway - на каких мощностях будет запускаться логика callback, являются ли эти мощности многопоточными
+	 * (Например: для ConcurrentHighWay и SingleThreadHighWay будут использоваться разные механизмы публикации
+	 * результата)
+	 * @param filename - возможность сослаться на source code для помощи в отладке
+	 * (Хайвеи могут логировать зависший/упавший код - вышеуказанная строка будет в логе)
+	 * @param line - возможность сослаться на source code line для помощи в отладке
+	 * @param current_executed_node_publisher - используется для публикации прогресса и активности работы узлов
+	 * @param node_id - идентификатор этого узла чтобы отличать его в публикациях current_executed_node_publisher
+	 */
+	template <typename R, typename P>
+	static std::shared_ptr<AggregatingFutureNode<Operand, AggregatingBundle, Result>> create(
+		R && callback,
+		P protector,
+		std::shared_ptr<IHighWay> highway, //именно хайвей чтобы понять нужен ли ManyToMany паблишер
+		std::string filename = __FILE__,
+		const unsigned int line = __LINE__,
+		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher = nullptr,
+		const std::uint32_t node_id = 0)
 	{
-	}
+		auto result_publisher = [&]() -> std::shared_ptr<IPublisher<Result>>
+		{
+			if (highway->is_single_threaded())
+			{
+				return make_self_shared<PublishOneForMany<Result>>();
+			}
+			return make_self_shared<PublishManyForMany<Result>>();
+		}();
 
-	AggregatingFutureNode(
-		std::weak_ptr<AggregatingFutureNode<Operand, AggregatingBundle, Result>> self_weak,
-		AggregatingFutureNodeLogicPtr<Operand, AggregatingBundle, Result> future_node_logic,
-		AggregatingBundle && aggregating_bundle,
-		IHighWayMailBoxPtr high_way_mail_box,
-		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher,
-		std::uint32_t node_id)
-		: INode(std::move(current_executed_node_publisher), node_id)
-		, self_weak_{std::move(self_weak)}
-		, future_node_logic_{std::move(future_node_logic)}
-		, high_way_mail_box_{std::move(high_way_mail_box)}
-		, aggregating_bundle_{std::move(aggregating_bundle)}
-	{
-	}
+		auto future_node_logic = AggregatingFutureNodeLogic<Operand, AggregatingBundle, Result>::create(
+			std::move(callback),
+			std::move(protector),
+			std::move(filename),
+			line,
+			std::move(result_publisher));
 
-	void add_operand_channel(ISubscribeHere<Operand> & where_to_subscribe)
+		return make_self_shared<AggregatingFutureNode<Operand, AggregatingBundle, Result>>(
+			std::move(future_node_logic),
+			highway->mailbox(),
+			std::move(current_executed_node_publisher),
+			node_id);
+	} // create
+
+	void add_operand_channel(ISubscribeHere<Operand> & where_to_subscribe, bool send_may_fail = true)
 	{
 		const std::uint32_t operand_id = operands_count_.fetch_add(1, std::memory_order_relaxed);
-		auto subscription_callback = hi::SubscriptionCallback<Operand>::create(
-			[this, operand_id](Operand operand_value, const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
+		hi::subscribe(
+			where_to_subscribe,
+			[this, inode_weak = self_weak_, operand_id](
+				Operand operand_value,
+				const std::atomic<std::uint32_t> & global_run_id,
+				const std::uint32_t your_run_id) mutable
 			{
-				future_node_logic_->send(
-					operand_id,
-					std::move(operand_value),
-					aggregating_bundle_,
-					operands_count_.load(std::memory_order_acquire));
+				if (auto inode = inode_weak.lock())
+				{
+					future_node_logic_->send(
+						operand_id,
+						std::move(operand_value),
+						aggregating_bundle_,
+						operands_count_.load(std::memory_order_acquire),
+						*inode,
+						global_run_id,
+						your_run_id);
+				}
 			},
 			self_weak_,
+			highway_mailbox_,
+			send_may_fail,
 			__FILE__,
 			__LINE__);
-
-		where_to_subscribe.subscribe(
-			hi::Subscription<Operand>::create(std::move(subscription_callback), high_way_mail_box_));
 	}
 
 	ISubscribeHerePtr<Result> result_channel()
@@ -245,7 +358,7 @@ public:
 private:
 	const std::weak_ptr<AggregatingFutureNode<Operand, AggregatingBundle, Result>> self_weak_;
 	const AggregatingFutureNodeLogicPtr<Operand, AggregatingBundle, Result> future_node_logic_;
-	const IHighWayMailBoxPtr high_way_mail_box_;
+	const IHighWayMailBoxPtr highway_mailbox_;
 
 	AggregatingBundle aggregating_bundle_;
 	std::atomic<std::uint32_t> operands_count_{0};

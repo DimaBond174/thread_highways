@@ -99,7 +99,13 @@ public:
 	}
 	virtual ~IHighWay() = default;
 
-	std::weak_ptr<IHighWay> protector()
+	/*!
+	Для большинства интерфейсов нужен protector колбэка.
+	В реальном коде это должен быть std::weak_ptr на объект в котором работает колбэк.
+	Для некоторых юнит тестов можно использовать любой std::weak_ptr чтобы заполнить интерфейс,
+	например self_weak_ хайвея на котором будет исполняться код.
+	*/
+	std::weak_ptr<IHighWay> protector_for_tests_only()
 	{
 		return self_weak_;
 	}
@@ -138,6 +144,34 @@ public:
 		return std::make_shared<MailBoxSendHere>(self_weak_);
 	}
 
+	template <typename R>
+	void post(R && r, const bool send_may_fail, std::string filename, const unsigned int line)
+	{
+		auto runnable = Runnable::create<R>(std::move(r), std::move(filename), line);
+		if (send_may_fail)
+		{
+			bundle_.mail_box_.send_may_fail(std::move(runnable));
+		}
+		else
+		{
+			bundle_.mail_box_.send_may_blocked(std::move(runnable));
+		}
+	}
+
+	template <typename R, typename P>
+	void post(R && r, P protector, const bool send_may_fail, std::string filename, const unsigned int line)
+	{
+		auto runnable = Runnable::create<R>(std::move(r), std::move(protector), std::move(filename), line);
+		if (send_may_fail)
+		{
+			bundle_.mail_box_.send_may_fail(std::move(runnable));
+		}
+		else
+		{
+			bundle_.mail_box_.send_may_blocked(std::move(runnable));
+		}
+	}
+
 	std::string get_name()
 	{
 		return bundle_.highway_name_;
@@ -147,6 +181,9 @@ public:
 	{
 		return bundle_.global_run_id_;
 	}
+
+	// Является ли хайвей однопоточным
+	virtual bool is_single_threaded() const noexcept = 0;
 
 	// Должен обязательно вызываться для удаления
 	// Хайвей держит shared_ptr на себя чтобы не был случайно вызван деструктор до
@@ -200,54 +237,22 @@ protected:
 	HighWayBundle bundle_;
 };
 
-/*
+/*!
 	Обобщающая функция запуска Runnable на хайвее
-	@highway - экзекутор на котором должен выполняться код колбэка
-	@callback - колбэк обработчика публикации
-	@send_may_fail - можно пропустить отправку если на хайвее подписчика закончились холдеры сообщений
-	@filename, @line - координаты кода для отладки
+	@param callback - колбэк обработчика публикации
+	@param highway - экзекутор на котором должен выполняться код колбэка
+	@param send_may_fail - можно пропустить отправку если на хайвее подписчика закончились холдеры сообщений
+	@param filename, param @line - координаты кода для отладки
 */
 template <typename R>
 void execute(
-	std::shared_ptr<IHighWay> highway,
 	R && callback,
-	bool send_may_fail = false,
+	std::shared_ptr<IHighWay> highway,
+	const bool send_may_fail = false,
 	std::string filename = __FILE__,
-	unsigned int line = __LINE__)
+	const unsigned int line = __LINE__)
 {
-	struct RunnableHolder
-	{
-		RunnableHolder(R && r)
-			: r_{std::move(r)}
-		{
-		}
-
-		void operator()(
-			[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
-			[[maybe_unused]] const std::uint32_t your_run_id)
-		{
-			if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
-			{
-				r_(global_run_id, your_run_id);
-			}
-			else
-			{
-				r_();
-			}
-		}
-
-		R r_;
-	};
-
-	auto runnable = hi::Runnable::create(RunnableHolder{std::move(callback)}, std::move(filename), line);
-	if (send_may_fail)
-	{
-		highway->mailbox()->send_may_fail(std::move(runnable));
-	}
-	else
-	{
-		highway->mailbox()->send_may_blocked(std::move(runnable));
-	}
+	highway->post<R>(std::move(callback), send_may_fail, std::move(filename), line);
 }
 
 } // namespace hi

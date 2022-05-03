@@ -83,7 +83,7 @@ TYPED_TEST(TestMultithreading, IncreaseDecreaseWorkers)
 		};
 
 		{
-			RAIIdestroy guard{hi::make_self_shared<TypeParam>(
+			RAIIdestroy highway{hi::make_self_shared<TypeParam>(
 				"HighWay",
 				hi::create_default_logger(
 					[&](std::string msg)
@@ -95,11 +95,8 @@ TYPED_TEST(TestMultithreading, IncreaseDecreaseWorkers)
 				1ms // workers_change_period
 				)};
 
-			guard.object_->set_max_concurrent_workers(2);
-
-			hi::subscribe(
-				publisher->subscribe_channel(),
-				guard.object_,
+			highway.object_->set_max_concurrent_workers(2);
+			publisher->subscribe(
 				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 				{
 					{
@@ -107,7 +104,19 @@ TYPED_TEST(TestMultithreading, IncreaseDecreaseWorkers)
 						threads.insert(std::this_thread::get_id());
 					}
 					std::this_thread::sleep_for(10ms);
-				});
+				},
+				highway.object_->protector_for_tests_only(),
+				highway.object_->mailbox());
+			//			hi::subscribe(
+			//				*publisher->subscribe_channel(),
+			//				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
+			//				{
+			//					{
+			//						std::lock_guard lg{threads_protector};
+			//						threads.insert(std::this_thread::get_id());
+			//					}
+			//					std::this_thread::sleep_for(10ms);
+			//				}, highway.object_->);
 
 			// save thread id's
 			publish();
@@ -118,8 +127,8 @@ TYPED_TEST(TestMultithreading, IncreaseDecreaseWorkers)
 				EXPECT_GT(last_size, 1);
 			}
 
-			guard.object_->free_time_logic().hr_strategy_ = CustomFreeTimeLogic::HRstrategy::DecreaseWorkers;
-			guard.object_->flush_tasks();
+			highway.object_->free_time_logic().hr_strategy_ = CustomFreeTimeLogic::HRstrategy::DecreaseWorkers;
+			highway.object_->flush_tasks();
 			// wait for decreasing
 			publish();
 

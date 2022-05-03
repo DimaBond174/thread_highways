@@ -84,12 +84,22 @@ TYPED_TEST(TestPublushOneForOne, DirectSend)
 				PublishManyForOne<std::uint32_t>,
 				TypeParam> || std::is_same_v<PublishManyForOne<std::string>, TypeParam>)
 		{
-			return std::make_shared<TypeParam>(highway, std::move(callback));
+			return std::make_shared<TypeParam>(
+				std::move(callback),
+				highway->protector_for_tests_only(),
+				highway->mailbox());
 		}
 		else
 		{
 			auto publisher = hi::make_self_shared<TypeParam>();
-			hi::subscribe(publisher->subscribe_channel(), highway, std::move(callback));
+			publisher->subscribe(std::move(callback), highway->protector_for_tests_only(), highway->mailbox());
+			//			publisher->subscribe(Subscription<typename TypeParam::PublicationType>::create(
+			//				std::move(callback),
+			//				 highway->protector_for_tests_only(),
+			//				 highway->mailbox()
+			//				 ));
+			// hi::subscribe(*publisher->subscribe_channel(), std::move(callback), highway->protector_for_tests_only(),
+			// highway->mailbox());
 			return publisher;
 		}
 	}();

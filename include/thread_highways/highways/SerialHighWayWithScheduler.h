@@ -56,6 +56,11 @@ public:
 		max_repairs_ = max_repairs;
 	}
 
+	bool is_single_threaded() const noexcept override
+	{
+		return false;
+	}
+
 	void destroy() override
 	{
 		++bundle_.global_run_id_;

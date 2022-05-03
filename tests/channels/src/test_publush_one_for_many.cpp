@@ -74,22 +74,24 @@ TYPED_TEST(TestPublushOneForMany, DirectSend)
 	auto publisher = hi::make_self_shared<TypeParam>();
 
 	hi::subscribe(
-		publisher->subscribe_channel(),
-		guard.object_,
+		*publisher->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result1_protector};
 			result1.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		});
+		},
+		guard.object_->protector_for_tests_only(),
+		guard.object_->mailbox());
 
 	hi::subscribe(
-		publisher->subscribe_channel(),
-		guard.object_,
+		*publisher->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result2_protector};
 			result2.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		});
+		},
+		guard.object_->protector_for_tests_only(),
+		guard.object_->mailbox());
 
 	for (auto && it : data)
 	{

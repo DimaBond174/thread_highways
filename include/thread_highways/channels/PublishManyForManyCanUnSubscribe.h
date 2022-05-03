@@ -49,6 +49,24 @@ public:
 		subscriptions_stack_.push(new Holder<Subscription<Publication>>{std::move(subscription)});
 	}
 
+	template <typename R, typename P>
+	void subscribe(
+		R && callback,
+		P protector,
+		IHighWayMailBoxPtr highway_mailbox,
+		const bool send_may_fail = true,
+		std::string filename = __FILE__,
+		const unsigned int line = __LINE__)
+	{
+		subscribe(Subscription<Publication>::create(
+			std::move(callback),
+			std::move(protector),
+			std::move(highway_mailbox),
+			send_may_fail,
+			std::move(filename),
+			line));
+	} // subscribe
+
 	bool subscribers_exist()
 	{
 		std::lock_guard lg{mutex_};

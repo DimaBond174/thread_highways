@@ -16,10 +16,10 @@
 #include <thread_highways/execution_tree/AggregatingFutureNode.h>
 #include <thread_highways/execution_tree/ExecutionTree.h>
 #include <thread_highways/execution_tree/FutureNode.h>
-#include <thread_highways/execution_tree/FutureNodeWithProgressPublisher.h>
 #include <thread_highways/execution_tree/IfElseFutureNode.h>
 #include <thread_highways/execution_tree/OperationWithTwoOperandsFutureNode.h>
 #include <thread_highways/execution_tree/ResultWaitFutureNode.h>
+#include <thread_highways/execution_tree/VoidFutureNode.h>
 
 #include <thread_highways/highways/ConcurrentHighWay.h>
 #include <thread_highways/highways/ConcurrentHighWayDebug.h>

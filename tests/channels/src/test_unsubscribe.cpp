@@ -64,15 +64,15 @@ TYPED_TEST(TestUnsubscribe, DirectUnsubscribe)
 
 	// выключатель подписки
 	auto protector = std::make_shared<bool>();
-	hi::subscribe_with_custom_protector(
-		publisher->subscribe_channel(),
-		highway,
+	hi::subscribe(
+		*publisher->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
 		},
-		std::weak_ptr{protector});
+		std::weak_ptr{protector},
+		highway->mailbox());
 
 	for (auto && it : data)
 	{
@@ -125,15 +125,15 @@ TYPED_TEST(TestUnsubscribe, UnsubscribeBufferedSend)
 
 	// выключатель подписки
 	auto protector = std::make_shared<bool>();
-	hi::subscribe_with_custom_protector(
-		buffered_retransmitter->subscribe_channel(),
-		highway,
+	hi::subscribe(
+		*buffered_retransmitter->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
 		},
-		std::weak_ptr{protector});
+		std::weak_ptr{protector},
+		highway->mailbox());
 
 	for (auto && it : data)
 	{
@@ -185,15 +185,15 @@ TYPED_TEST(TestUnsubscribe, UnsubscribeBufferedSendResendToJustConnected)
 
 	// выключатель подписки
 	auto protector = std::make_shared<bool>();
-	hi::subscribe_with_custom_protector(
-		buffered_retransmitter->subscribe_channel(),
-		highway,
+	hi::subscribe(
+		*buffered_retransmitter->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
 		},
-		std::weak_ptr{protector});
+		std::weak_ptr{protector},
+		highway->mailbox());
 
 	for (auto && it : data)
 	{
@@ -245,15 +245,15 @@ TYPED_TEST(TestUnsubscribe, UnsubscribeBufferedSendNewOnly)
 
 	// выключатель подписки
 	auto protector = std::make_shared<bool>();
-	hi::subscribe_with_custom_protector(
-		buffered_retransmitter->subscribe_channel(),
-		highway,
+	hi::subscribe(
+		*buffered_retransmitter->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
 		},
-		std::weak_ptr{protector});
+		std::weak_ptr{protector},
+		highway->mailbox());
 
 	for (auto && it : data)
 	{
@@ -305,15 +305,15 @@ TYPED_TEST(TestUnsubscribe, UnsubscribeBufferedSendResendToJustConnectedNewOnly)
 
 	// выключатель подписки
 	auto protector = std::make_shared<bool>();
-	hi::subscribe_with_custom_protector(
-		buffered_retransmitter->subscribe_channel(),
-		highway,
+	hi::subscribe(
+		*buffered_retransmitter->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
 		},
-		std::weak_ptr{protector});
+		std::weak_ptr{protector},
+		highway->mailbox());
 
 	for (auto && it : data)
 	{

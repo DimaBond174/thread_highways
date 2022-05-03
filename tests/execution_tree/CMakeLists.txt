@@ -1,0 +1,1 @@
+add_subdirectory(simple_logic_nodes)

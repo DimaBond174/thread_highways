@@ -71,13 +71,14 @@ TYPED_TEST(TestBufferedRetransmitter, BufferedSend)
 			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
 
 	hi::subscribe(
-		buffered_retransmitter->subscribe_channel(),
-		highway,
+		*buffered_retransmitter->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		});
+		},
+		highway->protector_for_tests_only(),
+		highway->mailbox());
 
 	for (auto && it : data)
 	{
@@ -114,13 +115,14 @@ TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnected)
 			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
 
 	hi::subscribe(
-		buffered_retransmitter->subscribe_channel(),
-		highway,
+		*buffered_retransmitter->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		});
+		},
+		highway->protector_for_tests_only(),
+		highway->mailbox());
 
 	for (auto && it : data)
 	{
@@ -157,13 +159,14 @@ TYPED_TEST(TestBufferedRetransmitter, BufferedSendNewOnly)
 			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
 
 	hi::subscribe(
-		buffered_retransmitter->subscribe_channel(),
-		highway,
+		*buffered_retransmitter->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		});
+		},
+		highway->protector_for_tests_only(),
+		highway->mailbox());
 
 	for (auto && it : data)
 	{
@@ -200,13 +203,14 @@ TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnectedNewOnly)
 			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
 
 	hi::subscribe(
-		buffered_retransmitter->subscribe_channel(),
-		highway,
+		*buffered_retransmitter->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			std::lock_guard lg{result_protector};
 			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		});
+		},
+		highway->protector_for_tests_only(),
+		highway->mailbox());
 
 	for (auto && it : data)
 	{

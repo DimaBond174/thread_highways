@@ -30,7 +30,7 @@ void increase_decrease_workers()
 			std::this_thread::sleep_for(10ms);
 			std::cout << "\nmessage:" << i << std::endl;
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(

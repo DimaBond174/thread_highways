@@ -19,7 +19,7 @@ void test_1()
 		{
 			std::cout << "test_1, publication = " << publication << std::endl;
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(
@@ -30,7 +30,7 @@ void test_1()
 		{
 			std::cout << "test_2, publication = " << publication << std::endl;
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(

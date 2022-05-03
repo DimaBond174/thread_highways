@@ -43,7 +43,7 @@ void common_test(
 		{
 			promise.set_value(publication);
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 
@@ -163,7 +163,7 @@ void common_test(
 		{
 			promise.set_value(publication);
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 

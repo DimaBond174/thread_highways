@@ -48,6 +48,11 @@ public:
 		return std::this_thread::get_id() == main_worker_thread_id_.load(std::memory_order_acquire);
 	}
 
+	bool is_single_threaded() const noexcept override
+	{
+		return true;
+	}
+
 	void destroy() override
 	{
 		++bundle_.global_run_id_;

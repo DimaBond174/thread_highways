@@ -1,40 +1,32 @@
-#ifndef FutureNode_H
-#define FutureNode_H
+#ifndef VoidFutureNode_H
+#define VoidFutureNode_H
 
-#include <thread_highways/channels/IPublishSubscribe.h>
-#include <thread_highways/channels/PublishManyForMany.h>
-#include <thread_highways/channels/PublishOneForMany.h>
-#include <thread_highways/execution_tree/INode.h>
-#include <thread_highways/tools/make_self_shared.h>
-
-#include <cassert>
-#include <type_traits>
+#include <thread_highways/execution_tree/FutureNode.h>
 
 namespace hi
 {
 
-template <typename Parameter, typename Result>
-class FutureNodeLogic
+template <typename Result>
+class VoidFutureNodeLogic
 {
 public:
 	template <typename R, typename P>
-	static std::shared_ptr<FutureNodeLogic<Parameter, Result>> create(
+	static std::shared_ptr<VoidFutureNodeLogic<Result>> create(
 		R && callback,
 		P protector,
 		std::string filename,
 		unsigned int line,
 		std::shared_ptr<IPublisher<Result>> future_result_publisher)
 	{
-		struct FutureNodeLogicProtectedHolderImpl : public FutureNodeLogicHolder
+		struct VoidFutureNodeLogicProtectedHolderImpl : public VoidFutureNodeLogicHolder
 		{
-			FutureNodeLogicProtectedHolderImpl(R && callback, P && protector)
+			VoidFutureNodeLogicProtectedHolderImpl(R && callback, P && protector)
 				: callback_{std::move(callback)}
 				, protector_{std::move(protector)}
 			{
 			}
 
 			void operator()(
-				[[maybe_unused]] Parameter publication,
 				[[maybe_unused]] IPublisher<Result> & result_publisher,
 				[[maybe_unused]] INode & node,
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
@@ -42,54 +34,10 @@ public:
 			{
 				if constexpr (std::is_invocable_v<
 								  R,
-								  Parameter,
 								  IPublisher<Result> &,
 								  INode &,
 								  const std::atomic<std::uint32_t> &,
 								  const std::uint32_t>)
-				{
-					safe_invoke_void(
-						callback_,
-						protector_,
-						std::move(publication),
-						result_publisher,
-						node,
-						global_run_id,
-						your_run_id);
-				}
-				else if constexpr (std::is_invocable_v<R, Parameter, IPublisher<Result> &, INode &>)
-				{
-					safe_invoke_void(callback_, protector_, std::move(publication), result_publisher, node);
-				}
-				else if constexpr (std::is_invocable_v<
-									   R,
-									   Parameter,
-									   IPublisher<Result> &,
-									   const std::atomic<std::uint32_t> &,
-									   const std::uint32_t>)
-				{
-					safe_invoke_void(
-						callback_,
-						protector_,
-						std::move(publication),
-						result_publisher,
-						global_run_id,
-						your_run_id);
-				}
-				else if constexpr (std::is_invocable_v<R, Parameter, IPublisher<Result> &>)
-				{
-					safe_invoke_void(callback_, protector_, std::move(publication), result_publisher);
-				}
-				else if constexpr (std::is_invocable_v<R, Parameter>)
-				{
-					safe_invoke_void(callback_, protector_, std::move(publication));
-				}
-				else if constexpr (std::is_invocable_v<
-									   R,
-									   IPublisher<Result> &,
-									   INode &,
-									   const std::atomic<std::uint32_t> &,
-									   const std::uint32_t>)
 				{
 					safe_invoke_void(callback_, protector_, result_publisher, node, global_run_id, your_run_id);
 				}
@@ -111,8 +59,7 @@ public:
 				}
 				else
 				{
-					// The callback signature must be one of the above
-					assert(false);
+					safe_invoke_void(callback_, protector_);
 				}
 			}
 
@@ -128,20 +75,20 @@ public:
 			R callback_;
 			P protector_;
 		};
-		return std::make_shared<FutureNodeLogic<Parameter, Result>>(
-			new FutureNodeLogicProtectedHolderImpl{std::move(callback), std::move(protector)},
+		return std::make_shared<VoidFutureNodeLogic<Result>>(
+			new VoidFutureNodeLogicProtectedHolderImpl{std::move(callback), std::move(protector)},
 			std::move(filename),
 			line,
 			std::move(future_result_publisher));
 	}
 
-	~FutureNodeLogic()
+	~VoidFutureNodeLogic()
 	{
 		delete subscription_callback_holder_;
 	}
-	FutureNodeLogic(const FutureNodeLogic & rhs) = delete;
-	FutureNodeLogic & operator=(const FutureNodeLogic & rhs) = delete;
-	FutureNodeLogic(FutureNodeLogic && rhs)
+	VoidFutureNodeLogic(const VoidFutureNodeLogic & rhs) = delete;
+	VoidFutureNodeLogic & operator=(const VoidFutureNodeLogic & rhs) = delete;
+	VoidFutureNodeLogic(VoidFutureNodeLogic && rhs)
 		: filename_{std::move(rhs.filename_)}
 		, line_{rhs.line_}
 		, subscription_callback_holder_{rhs.subscription_callback_holder_}
@@ -149,7 +96,7 @@ public:
 	{
 		rhs.subscription_callback_holder_ = nullptr;
 	}
-	FutureNodeLogic & operator=(FutureNodeLogic && rhs)
+	VoidFutureNodeLogic & operator=(VoidFutureNodeLogic && rhs)
 	{
 		if (this == &rhs)
 			return *this;
@@ -161,18 +108,9 @@ public:
 		return *this;
 	}
 
-	void send(
-		Parameter publication,
-		INode & node,
-		const std::atomic<std::uint32_t> & global_run_id,
-		const std::uint32_t your_run_id) const
+	void send(INode & node, const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id) const
 	{
-		(*subscription_callback_holder_)(
-			std::move(publication),
-			*future_result_publisher_,
-			node,
-			global_run_id,
-			your_run_id);
+		(*subscription_callback_holder_)(*future_result_publisher_, node, global_run_id, your_run_id);
 	}
 
 	bool alive()
@@ -203,11 +141,10 @@ public:
 		return nullptr;
 	}
 
-	struct FutureNodeLogicHolder
+	struct VoidFutureNodeLogicHolder
 	{
-		virtual ~FutureNodeLogicHolder() = default;
+		virtual ~VoidFutureNodeLogicHolder() = default;
 		virtual void operator()(
-			[[maybe_unused]] Parameter publication,
 			IPublisher<Result> & result_publisher,
 			[[maybe_unused]] INode & node,
 			[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
@@ -215,8 +152,8 @@ public:
 		[[nodiscard]] virtual bool alive() = 0;
 	};
 
-	FutureNodeLogic(
-		FutureNodeLogicHolder * subscription_holder,
+	VoidFutureNodeLogic(
+		VoidFutureNodeLogicHolder * subscription_holder,
 		std::string filename,
 		unsigned int line,
 		std::shared_ptr<IPublisher<Result>> future_result_publisher)
@@ -232,20 +169,27 @@ public:
 private:
 	std::string filename_;
 	unsigned int line_;
-	FutureNodeLogicHolder * subscription_callback_holder_;
+	VoidFutureNodeLogicHolder * subscription_callback_holder_;
 	std::shared_ptr<IPublisher<Result>> future_result_publisher_;
-}; // FutureNodeLogic
+}; // VoidFutureNodeLogic
 
-template <typename Parameter, typename Result>
-using FutureNodeLogicPtr = std::shared_ptr<FutureNodeLogic<Parameter, Result>>;
+template <typename Result>
+using VoidFutureNodeLogicPtr = std::shared_ptr<VoidFutureNodeLogic<Result>>;
 
-template <typename Parameter, typename Result>
-class FutureNode : public INode
+/*!
+ * Аналог FutureNode, но не требует спецификации входящего параметра
+ * и поэтому позволяет подписаться на публикации разных типов.
+ * Применение:
+ * - некая логика которая должна мониторить другие разнородные узлы.
+ * - первый узел в ExecutionTree которому для запуска не нужен входящий параметр.
+ */
+template <typename Result>
+class VoidFutureNode : public INode
 {
 public:
-	FutureNode(
-		std::weak_ptr<FutureNode<Parameter, Result>> self_weak,
-		FutureNodeLogicPtr<Parameter, Result> future_node_logic,
+	VoidFutureNode(
+		std::weak_ptr<VoidFutureNode<Result>> self_weak,
+		VoidFutureNodeLogicPtr<Result> future_node_logic,
 		IHighWayMailBoxPtr highway_mailbox,
 		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher = nullptr,
 		std::uint32_t node_id = 0)
@@ -257,7 +201,7 @@ public:
 	}
 
 	template <typename R, typename P>
-	static std::shared_ptr<FutureNode<Parameter, Result>> create(
+	static std::shared_ptr<VoidFutureNode<Result>> create(
 		R && callback,
 		P protector,
 		std::shared_ptr<IHighWay> highway, //именно хайвей чтобы понять нужен ли ManyToMany паблишер
@@ -275,37 +219,39 @@ public:
 			return make_self_shared<PublishManyForMany<Result>>();
 		}();
 
-		auto future_node_logic = FutureNodeLogic<Parameter, Result>::create(
+		auto future_node_logic = VoidFutureNodeLogic<Result>::create(
 			std::move(callback),
 			std::move(protector),
 			std::move(filename),
 			line,
 			std::move(publisher));
 
-		return make_self_shared<FutureNode<Parameter, Result>>(
+		return make_self_shared<VoidFutureNode<Result>>(
 			std::move(future_node_logic),
 			highway->mailbox(),
 			std::move(current_executed_node_publisher),
 			node_id);
 	} // create
 
+	template <typename Parameter>
 	Subscription<Parameter> subscription(bool send_may_fail = true) const
 	{
-		return send_may_fail ? subscription_send_may_fail() : subscription_send_may_blocked();
+		return send_may_fail ? subscription_send_may_fail<Parameter>() : subscription_send_may_blocked<Parameter>();
 	}
 
 	void execute() const
 	{
-		subscription().send(Parameter{});
+		subscription<bool>().send(true);
 	}
 
+	template <typename Parameter>
 	Subscription<Parameter> subscription_send_may_fail() const
 	{
 		struct SubscriptionProtectedHolderImpl : public Subscription<Parameter>::SubscriptionHolder
 		{
 			SubscriptionProtectedHolderImpl(
-				std::weak_ptr<FutureNode<Parameter, Result>> inode_weak,
-				FutureNodeLogicPtr<Parameter, Result> future_node_logic,
+				std::weak_ptr<VoidFutureNode<Result>> inode_weak,
+				VoidFutureNodeLogicPtr<Result> future_node_logic,
 				IHighWayMailBoxPtr highway_mailbox)
 				: inode_weak_{std::move(inode_weak)}
 				, future_node_logic_{std::move(future_node_logic)}
@@ -313,7 +259,7 @@ public:
 			{
 			}
 
-			bool operator()(Parameter publication) override
+			bool operator()(Parameter) override
 			{
 				if (!future_node_logic_->alive())
 				{
@@ -323,16 +269,13 @@ public:
 				if (auto lock = inode_weak_.lock())
 				{
 					auto message = hi::Runnable::create(
-						[this,
-						 inode_weak = inode_weak_,
-						 subscription_callback = future_node_logic_,
-						 publication = std::move(publication)](
+						[this, inode_weak = inode_weak_, subscription_callback = future_node_logic_](
 							const std::atomic<std::uint32_t> & global_run_id,
 							const std::uint32_t your_run_id) mutable
 						{
 							if (auto inode = inode_weak.lock())
 							{
-								subscription_callback->send(std::move(publication), *inode, global_run_id, your_run_id);
+								subscription_callback->send(*inode, global_run_id, your_run_id);
 							}
 						},
 						future_node_logic_->get_code_filename(),
@@ -342,8 +285,8 @@ public:
 				return false;
 			}
 
-			const std::weak_ptr<FutureNode<Parameter, Result>> inode_weak_;
-			const FutureNodeLogicPtr<Parameter, Result> future_node_logic_;
+			const std::weak_ptr<VoidFutureNode<Result>> inode_weak_;
+			const VoidFutureNodeLogicPtr<Result> future_node_logic_;
 			const IHighWayMailBoxPtr highway_mailbox_;
 		};
 
@@ -351,13 +294,14 @@ public:
 			new SubscriptionProtectedHolderImpl{self_weak_, future_node_logic_, highway_mailbox_}};
 	}
 
+	template <typename Parameter>
 	Subscription<Parameter> subscription_send_may_blocked() const
 	{
 		struct SubscriptionProtectedHolderImpl : public Subscription<Parameter>::SubscriptionHolder
 		{
 			SubscriptionProtectedHolderImpl(
-				std::weak_ptr<FutureNode<Parameter, Result>> inode_weak,
-				FutureNodeLogicPtr<Parameter, Result> future_node_logic,
+				std::weak_ptr<VoidFutureNode<Result>> inode_weak,
+				VoidFutureNodeLogicPtr<Result> future_node_logic,
 				IHighWayMailBoxPtr highway_mailbox)
 				: inode_weak_{std::move(inode_weak)}
 				, future_node_logic_{std::move(future_node_logic)}
@@ -365,7 +309,7 @@ public:
 			{
 			}
 
-			bool operator()(Parameter publication) override
+			bool operator()(Parameter) override
 			{
 				if (!future_node_logic_->alive())
 				{
@@ -375,16 +319,13 @@ public:
 				if (auto lock = inode_weak_.lock())
 				{
 					auto message = hi::Runnable::create(
-						[this,
-						 inode_weak = inode_weak_,
-						 subscription_callback = future_node_logic_,
-						 publication = std::move(publication)](
+						[this, inode_weak = inode_weak_, subscription_callback = future_node_logic_](
 							const std::atomic<std::uint32_t> & global_run_id,
 							const std::uint32_t your_run_id) mutable
 						{
 							if (auto inode = inode_weak.lock())
 							{
-								subscription_callback->send(std::move(publication), *inode, global_run_id, your_run_id);
+								subscription_callback->send(*inode, global_run_id, your_run_id);
 							}
 						},
 						future_node_logic_->get_code_filename(),
@@ -394,9 +335,9 @@ public:
 				return false;
 			}
 
-			const std::weak_ptr<FutureNode<Parameter, Result>> inode_weak_;
-			FutureNodeLogicPtr<Parameter, Result> future_node_logic_;
-			IHighWayMailBoxPtr highway_mailbox_;
+			const std::weak_ptr<VoidFutureNode<Result>> inode_weak_;
+			const VoidFutureNodeLogicPtr<Result> future_node_logic_;
+			const IHighWayMailBoxPtr highway_mailbox_;
 		};
 
 		return Subscription<Parameter>{
@@ -409,11 +350,11 @@ public:
 	}
 
 private:
-	const std::weak_ptr<FutureNode<Parameter, Result>> self_weak_;
-	const FutureNodeLogicPtr<Parameter, Result> future_node_logic_;
-	const IHighWayMailBoxPtr highway_mailbox_;
-}; // FutureNode
+	const std::weak_ptr<VoidFutureNode<Result>> self_weak_;
+	VoidFutureNodeLogicPtr<Result> future_node_logic_;
+	IHighWayMailBoxPtr highway_mailbox_;
+}; // VoidFutureNode
 
 } // namespace hi
 
-#endif // FutureNode_H
+#endif // VoidFutureNode_H

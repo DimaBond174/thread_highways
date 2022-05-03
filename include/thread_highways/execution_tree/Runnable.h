@@ -25,9 +25,18 @@ public:
 				: r_{std::move(r)}
 			{
 			}
-			void operator()(const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id) override
+			void operator()(
+				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
+				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				r_(global_run_id, your_run_id);
+				if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
+				{
+					r_(global_run_id, your_run_id);
+				}
+				else
+				{
+					r_();
+				}
 			}
 			R r_;
 		};
@@ -35,7 +44,7 @@ public:
 	}
 
 	template <typename R, typename P>
-	static Runnable create(R && runnable, P && protector, std::string filename, unsigned int line)
+	static Runnable create(R && runnable, P protector, std::string filename, unsigned int line)
 	{
 		struct RunnableProtectedHolderImpl : public RunnableHolder
 		{
@@ -45,9 +54,18 @@ public:
 			{
 			}
 
-			void operator()(const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id) override
+			void operator()(
+				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
+				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				safe_invoke_void(runnable_, protector_, global_run_id, your_run_id);
+				if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
+				{
+					safe_invoke_void(runnable_, protector_, global_run_id, your_run_id);
+				}
+				else
+				{
+					safe_invoke_void(runnable_, protector_);
+				}
 			}
 			R runnable_;
 			P protector_;

@@ -4,6 +4,7 @@
 #include <thread_highways/tools/safe_invoke.h>
 
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <string>
 
@@ -41,10 +42,23 @@ public:
 			}
 			void operator()(
 				Schedule & schedule,
-				const std::atomic<std::uint32_t> & global_run_id,
-				const std::uint32_t your_run_id) override
+				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
+				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				r_(schedule, global_run_id, your_run_id);
+				if constexpr (
+					std::is_invocable_v<R, Schedule &, const std::atomic<std::uint32_t> &, const std::uint32_t>)
+				{
+					r_(schedule, global_run_id, your_run_id);
+				}
+				else if constexpr (std::is_invocable_v<R, Schedule &>)
+				{
+					r_(schedule);
+				}
+				else
+				{
+					// The callback signature must be one of the above
+					assert(false);
+				}
 			}
 			R r_;
 		};
@@ -64,10 +78,23 @@ public:
 
 			void operator()(
 				Schedule & schedule,
-				const std::atomic<std::uint32_t> & global_run_id,
-				const std::uint32_t your_run_id) override
+				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
+				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				safe_invoke_void(runnable_, protector_, schedule, global_run_id, your_run_id);
+				if constexpr (
+					std::is_invocable_v<R, Schedule &, const std::atomic<std::uint32_t> &, const std::uint32_t>)
+				{
+					safe_invoke_void(runnable_, protector_, schedule, global_run_id, your_run_id);
+				}
+				else if constexpr (std::is_invocable_v<R, Schedule &>)
+				{
+					safe_invoke_void(runnable_, protector_, schedule);
+				}
+				else
+				{
+					// The callback signature must be one of the above
+					assert(false);
+				}
 			}
 			R runnable_;
 			P protector_;

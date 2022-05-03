@@ -65,10 +65,7 @@ TYPED_TEST(TestHighwayMonitoring, RepairHungs)
 			monitoring.add_for_monitoring(highway);
 
 			auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
-
-			hi::subscribe(
-				publisher->subscribe_channel(),
-				highway,
+			publisher->subscribe(
 				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 				{
 					std::this_thread::sleep_for(std::chrono::milliseconds{30});
@@ -78,7 +75,22 @@ TYPED_TEST(TestHighwayMonitoring, RepairHungs)
 					{
 						promise_highway_will_repaired.set_value(true);
 					}
-				});
+				},
+				highway->protector_for_tests_only(),
+				highway->mailbox());
+			//			hi::subscribe(
+			//				publisher->subscribe_channel(),
+			//				highway,
+			//				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
+			//				{
+			//					std::this_thread::sleep_for(std::chrono::milliseconds{30});
+			//					std::lock_guard lg{unique_ids_protector};
+			//					unique_ids.emplace(std::this_thread::get_id());
+			//					if (unique_ids.size() > 1)
+			//					{
+			//						promise_highway_will_repaired.set_value(true);
+			//					}
+			//				});
 
 			std::future_status status;
 			do
@@ -137,10 +149,7 @@ TYPED_TEST(TestHighwayMonitoring, MustBeSerial)
 			monitoring.add_for_monitoring(highway);
 
 			auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
-
-			hi::subscribe(
-				publisher->subscribe_channel(),
-				highway,
+			publisher->subscribe(
 				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
 				{
 					{
@@ -166,7 +175,38 @@ TYPED_TEST(TestHighwayMonitoring, MustBeSerial)
 					{
 						test_done.set_value(true);
 					}
-				});
+				},
+				highway->protector_for_tests_only(),
+				highway->mailbox());
+			//			hi::subscribe(
+			//				publisher->subscribe_channel(),
+			//				highway,
+			//				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
+			//				{
+			//					{
+			//						const auto my_thread_id = std::this_thread::get_id();
+			//						std::lock_guard lg{thread_ids_mutex};
+			//						if (thread_ids.size() > 0 && thread_ids[thread_ids.size() - 1] != my_thread_id)
+			//						{
+			//							for (auto it : thread_ids)
+			//							{
+			//								EXPECT_NE(my_thread_id, it);
+			//							}
+			//							thread_ids.emplace_back(my_thread_id);
+			//						}
+			//						else if (thread_ids.size() == 0)
+			//						{
+			//							thread_ids.emplace_back(my_thread_id);
+			//						}
+			//					}
+
+			//					std::this_thread::sleep_for(std::chrono::milliseconds{100});
+			//					++tasks_executed;
+			//					if (tasks_executed == max_tasks)
+			//					{
+			//						test_done.set_value(true);
+			//					}
+			//				});
 
 			std::future_status status;
 			do

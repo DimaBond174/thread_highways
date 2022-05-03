@@ -38,20 +38,22 @@ TYPED_TEST(TestPublushManyForMany, DirectSend)
 	auto publisher = hi::make_self_shared<TypeParam>();
 
 	hi::subscribe(
-		publisher->subscribe_channel(),
-		highway,
+		*publisher->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			result1 += message;
-		});
+		},
+		highway->protector_for_tests_only(),
+		highway->mailbox());
 
 	hi::subscribe(
-		publisher->subscribe_channel(),
-		highway,
+		*publisher->subscribe_channel(),
 		[&](typename TypeParam::PublicationType message)
 		{
 			result2 += message;
-		});
+		},
+		highway->protector_for_tests_only(),
+		highway->mailbox());
 
 	std::thread thread1{[&]
 						{

@@ -29,7 +29,7 @@ void monitor_shortage_of_holders()
 		{
 			// std::this_thread::sleep_for(100ms);
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(
@@ -58,7 +58,7 @@ void monitor_exception()
 		{
 			throw std::logic_error("some logic_error");
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(
@@ -91,7 +91,7 @@ void monitor_hungs()
 		{
 			std::this_thread::sleep_for(1000ms);
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(
@@ -125,7 +125,7 @@ void monitor_debug()
 				std::this_thread::sleep_for(10ms);
 			}
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(
@@ -161,7 +161,7 @@ void monitor_and_repair_hungs()
 			assert(highway->current_execution_on_this_highway());
 			std::this_thread::sleep_for(100ms);
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(
@@ -199,7 +199,7 @@ void monitor_and_repair_hungs_concurrent_highway()
 		{
 			std::this_thread::sleep_for(100ms);
 		},
-		highway->protector(),
+		highway->protector_for_tests_only(),
 		__FILE__,
 		__LINE__);
 	publisher->subscribe_channel()->subscribe(
