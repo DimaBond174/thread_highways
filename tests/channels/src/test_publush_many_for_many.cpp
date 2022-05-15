@@ -39,8 +39,8 @@ TYPED_TEST(TestPublushManyForMany, DirectSend)
 	std::atomic<std::uint32_t> result2{0};
 	std::vector<std::uint32_t> data1{1, 2, 3, 4, 5, 6, 7};
 	std::vector<std::uint32_t> data2{8, 9, 10, 11, 12, 13, 14};
-	const std::uint32_t expected_result =
-		std::accumulate(data1.begin(), data1.end(), 0) + std::accumulate(data2.begin(), data2.end(), 0);
+	const std::uint32_t expected_result = std::accumulate(data1.begin(), data1.end(), std::uint32_t{0})
+		+ std::accumulate(data2.begin(), data2.end(), std::uint32_t{0});
 
 	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 
