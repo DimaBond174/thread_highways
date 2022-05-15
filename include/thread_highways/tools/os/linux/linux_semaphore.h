@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef SEMAPHORE_H
 #define SEMAPHORE_H
 

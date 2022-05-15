@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #include <thread_highways/include_all.h>
 
 #include <gtest/gtest.h>
@@ -37,6 +44,7 @@ struct CustomFreeTimeLogic
 		case HRstrategy::IncreaseWorkers:
 			return {};
 		}
+		return {};
 	}
 
 	std::string get_code_filename()
@@ -75,7 +83,7 @@ TYPED_TEST(TestMultithreading, IncreaseDecreaseWorkers)
 		auto publish = [&]
 		{
 			auto start = std::chrono::steady_clock::now();
-			while (std::chrono::steady_clock::now() - start < 100ms)
+			while (std::chrono::steady_clock::now() - start < 300ms)
 			{
 				publisher->publish(0);
 				std::this_thread::sleep_for(1ms);
@@ -97,7 +105,7 @@ TYPED_TEST(TestMultithreading, IncreaseDecreaseWorkers)
 
 			highway.object_->set_max_concurrent_workers(2);
 			publisher->subscribe(
-				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
+				[&](std::int32_t)
 				{
 					{
 						std::lock_guard lg{threads_protector};
@@ -107,16 +115,6 @@ TYPED_TEST(TestMultithreading, IncreaseDecreaseWorkers)
 				},
 				highway.object_->protector_for_tests_only(),
 				highway.object_->mailbox());
-			//			hi::subscribe(
-			//				*publisher->subscribe_channel(),
-			//				[&](std::int32_t, const std::atomic<std::uint32_t> &, const std::uint32_t)
-			//				{
-			//					{
-			//						std::lock_guard lg{threads_protector};
-			//						threads.insert(std::this_thread::get_id());
-			//					}
-			//					std::this_thread::sleep_for(10ms);
-			//				}, highway.object_->);
 
 			// save thread id's
 			publish();

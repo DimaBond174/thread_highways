@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #include <thread_highways/include_all.h>
 
 #include <gtest/gtest.h>
@@ -170,7 +177,7 @@ TYPED_TEST(TestHighwayPauseLifecycle, ThreadsOnPauseAndMonitoringToo)
 			EXPECT_EQ(false, threads_online);
 
 			highway->free_time_logic().resume();
-			std::this_thread::sleep_for(std::chrono::milliseconds{30});
+			std::this_thread::sleep_for(std::chrono::milliseconds{100});
 			monitoring.resume();
 			shared_logger.log("resumed");
 

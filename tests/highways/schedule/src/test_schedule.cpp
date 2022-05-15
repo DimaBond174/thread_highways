@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #include <thread_highways/include_all.h>
 
 #include <gtest/gtest.h>
@@ -73,7 +80,7 @@ TEST(TestSchedule, ScheduleWithHighWaysMonitoring)
 
 TEST(TestSchedule, CheckScheduleStartTimes)
 {
-	const std::chrono::milliseconds timer_executes_each_ms{1ms};
+	const std::chrono::milliseconds timer_executes_each_ms{100ms};
 	const std::chrono::milliseconds timer_epsilon{timer_executes_each_ms * 2};
 	auto highway = hi::make_self_shared<hi::SerialHighWayWithScheduler<>>(
 		"SerialHighWay:serial_schedule",

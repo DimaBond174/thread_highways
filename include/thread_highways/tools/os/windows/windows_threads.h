@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef WINDOWS_THREADS_H
 #define WINDOWS_THREADS_H
 
@@ -25,8 +32,6 @@ typedef struct tagTHREADNAME_INFO
 	static thread_local std::string name_buffer;
 	return name_buffer;
 }
-
-} // namespace
 
 void set_this_thread_name(const std::string & name)
 {
@@ -71,6 +76,7 @@ std::string get_this_thread_name()
 	return thread_name_buffer();
 }
 
+} // namespace
 } // namespace hi
 
 #endif // WINDOWS_THREADS_H

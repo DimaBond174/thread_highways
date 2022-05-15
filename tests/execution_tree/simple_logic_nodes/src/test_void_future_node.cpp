@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #include <thread_highways/include_all.h>
 
 #include <gtest/gtest.h>
@@ -158,11 +165,6 @@ TEST(TestVoidFutureNode, Callback4)
 		},
 		highway.object_->protector_for_tests_only(),
 		highway.object_->mailbox());
-	//		hi::subscribe(current_executed_node_publisher->subscribe_channel(), highway.object_,
-	//			 [&](CurrentExecutedNode current_executed_node) mutable
-	//			  {
-	//					 progress_result.set_value(current_executed_node);
-	//			   });
 
 	future_node->execute();
 	EXPECT_EQ(future_result_ready.get(), expected);

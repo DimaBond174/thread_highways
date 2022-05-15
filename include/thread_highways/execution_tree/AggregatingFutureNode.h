@@ -1,8 +1,16 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef AGGREGATINGFUTURENODE_H
 #define AGGREGATINGFUTURENODE_H
 
 #include <thread_highways/channels/IPublishSubscribe.h>
 #include <thread_highways/channels/PublishManyForMany.h>
+#include <thread_highways/channels/PublishManyForManyCanUnSubscribe.h>
 #include <thread_highways/channels/PublishOneForMany.h>
 #include <thread_highways/execution_tree/INode.h>
 #include <thread_highways/tools/make_self_shared.h>
@@ -118,6 +126,99 @@ public:
 				{
 					safe_invoke_void(callback_, protector_, operand_id, std::move(operand_value), aggregating_bundle);
 				}
+				else if constexpr (can_be_dereferenced<R &>::value)
+				{
+					auto && callback = *callback_;
+					if constexpr (std::is_invocable_v<
+									  decltype(callback),
+									  std::uint32_t,
+									  Operand,
+									  AggregatingBundle &,
+									  IPublisher<Result> &,
+									  std::uint32_t,
+									  INode &,
+									  const std::atomic<std::uint32_t> &,
+									  const std::uint32_t>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							operand_id,
+							std::move(operand_value),
+							aggregating_bundle,
+							result_publisher,
+							operands_count,
+							node,
+							global_run_id,
+							your_run_id);
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   std::uint32_t,
+										   Operand,
+										   AggregatingBundle &,
+										   IPublisher<Result> &,
+										   std::uint32_t,
+										   INode &>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							operand_id,
+							std::move(operand_value),
+							aggregating_bundle,
+							result_publisher,
+							operands_count,
+							node);
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   std::uint32_t,
+										   Operand,
+										   AggregatingBundle &,
+										   IPublisher<Result> &,
+										   std::uint32_t>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							operand_id,
+							std::move(operand_value),
+							aggregating_bundle,
+							result_publisher,
+							operands_count);
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   std::uint32_t,
+										   Operand,
+										   AggregatingBundle &,
+										   IPublisher<Result> &>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							operand_id,
+							std::move(operand_value),
+							aggregating_bundle,
+							result_publisher);
+					}
+					else if constexpr (
+						std::is_invocable_v<decltype(callback), std::uint32_t, Operand, AggregatingBundle &>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							operand_id,
+							std::move(operand_value),
+							aggregating_bundle);
+					}
+					else
+					{
+						// The callback signature must be one of the above
+						assert(false);
+					}
+				}
 				else
 				{
 					// The callback signature must be one of the above
@@ -164,9 +265,12 @@ public:
 			return *this;
 		filename_ = std::move(rhs.callback_);
 		line_ = rhs.line_;
-		subscription_callback_holder_ = rhs.subscription_callback_holder_;
 		future_result_publisher_ = rhs.future_result_publisher_;
+
+		delete subscription_callback_holder_;
+		subscription_callback_holder_ = rhs.subscription_callback_holder_;
 		rhs.subscription_callback_holder_ = nullptr;
+
 		return *this;
 	}
 
@@ -215,6 +319,10 @@ public:
 		{
 			return it->subscribe_channel();
 		}
+		if (auto it = std::dynamic_pointer_cast<PublishManyForManyCanUnSubscribe<Result>>(future_result_publisher_))
+		{
+			return it->subscribe_channel();
+		}
 		return nullptr;
 	}
 
@@ -250,7 +358,7 @@ public:
 private:
 	std::string filename_;
 	unsigned int line_;
-	AggregatingFutureNodeLogicHolder * subscription_callback_holder_;
+	AggregatingFutureNodeLogicHolder * subscription_callback_holder_{nullptr};
 	std::shared_ptr<IPublisher<Result>> future_result_publisher_;
 }; // AggregatingFutureNodeLogic
 
@@ -296,13 +404,18 @@ public:
 		std::string filename = __FILE__,
 		const unsigned int line = __LINE__,
 		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher = nullptr,
-		const std::uint32_t node_id = 0)
+		const std::uint32_t node_id = 0,
+		bool subscribers_can_unsubscribe = false)
 	{
 		auto result_publisher = [&]() -> std::shared_ptr<IPublisher<Result>>
 		{
 			if (highway->is_single_threaded())
 			{
 				return make_self_shared<PublishOneForMany<Result>>();
+			}
+			if (subscribers_can_unsubscribe)
+			{
+				return make_self_shared<PublishManyForManyCanUnSubscribe<Result>>();
 			}
 			return make_self_shared<PublishManyForMany<Result>>();
 		}();

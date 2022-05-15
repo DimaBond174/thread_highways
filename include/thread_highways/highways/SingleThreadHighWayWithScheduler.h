@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef SingleThreadHighWayWithScheduler_H
 #define SingleThreadHighWayWithScheduler_H
 
@@ -41,6 +48,19 @@ public:
 	void add_reschedulable_runnable(ReschedulableRunnable && runnable)
 	{
 		schedule_stack_.push(new hi::Holder<ReschedulableRunnable>(std::move(runnable)));
+	}
+
+	template <typename R>
+	void add_reschedulable_runnable(R && r, std::string filename, const unsigned int line)
+	{
+		add_reschedulable_runnable(hi::ReschedulableRunnable::create(std::move(r), std::move(filename), line));
+	}
+
+	template <typename R, typename P>
+	void add_reschedulable_runnable(R && r, P protector, std::string filename, const unsigned int line)
+	{
+		add_reschedulable_runnable(
+			hi::ReschedulableRunnable::create(std::move(r), std::move(protector), std::move(filename), line));
 	}
 
 	bool current_execution_on_this_highway() override

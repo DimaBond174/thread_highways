@@ -1,8 +1,16 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef IFELSE_FutureNode_H
 #define IFELSE_FutureNode_H
 
 #include <thread_highways/channels/IPublishSubscribe.h>
 #include <thread_highways/channels/PublishManyForMany.h>
+#include <thread_highways/channels/PublishManyForManyCanUnSubscribe.h>
 #include <thread_highways/channels/PublishOneForMany.h>
 #include <thread_highways/execution_tree/INode.h>
 #include <thread_highways/tools/make_self_shared.h>
@@ -20,7 +28,7 @@ public:
 		P protector,
 		std::string filename,
 		unsigned int line,
-		std::shared_ptr<IPublisher<ElseResult>> if_result_publisher,
+		std::shared_ptr<IPublisher<IfResult>> if_result_publisher,
 		std::shared_ptr<IPublisher<ElseResult>> else_result_publisher)
 	{
 		struct IfElseFutureNodeLogicProtectedHolderImpl : public IfElseFutureNodeLogicHolder
@@ -99,6 +107,83 @@ public:
 				{
 					safe_invoke_void(callback_, protector_, std::move(publication), if_result_publisher);
 				}
+				else if constexpr (can_be_dereferenced<R &>::value)
+				{
+					auto && callback = *callback_;
+					if constexpr (std::is_invocable_v<
+									  decltype(callback),
+									  Parameter,
+									  IPublisher<IfResult> &,
+									  IPublisher<ElseResult> &,
+									  INode &,
+									  const std::atomic<std::uint32_t> &,
+									  const std::uint32_t>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							std::move(publication),
+							if_result_publisher,
+							else_result_publisher,
+							node,
+							global_run_id,
+							your_run_id);
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   Parameter,
+										   IPublisher<IfResult> &,
+										   IPublisher<ElseResult> &,
+										   INode &>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							std::move(publication),
+							if_result_publisher,
+							else_result_publisher,
+							node);
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   Parameter,
+										   IPublisher<IfResult> &,
+										   IPublisher<ElseResult> &,
+										   const std::atomic<std::uint32_t> &,
+										   const std::uint32_t>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							std::move(publication),
+							if_result_publisher,
+							else_result_publisher,
+							global_run_id,
+							your_run_id);
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   Parameter,
+										   IPublisher<IfResult> &,
+										   IPublisher<ElseResult> &>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							std::move(publication),
+							if_result_publisher,
+							else_result_publisher);
+					}
+					else if constexpr (std::is_invocable_v<decltype(callback), Parameter, IPublisher<IfResult> &>)
+					{
+						safe_invoke_void(callback, protector_, std::move(publication), if_result_publisher);
+					}
+					else
+					{
+						// The callback signature must be one of the above
+						assert(false);
+					}
+				}
 				else
 				{
 					// The callback signature must be one of the above
@@ -147,9 +232,11 @@ public:
 			return *this;
 		filename_ = std::move(rhs.callback_);
 		line_ = rhs.line_;
-		subscription_callback_holder_ = rhs.subscription_callback_holder_;
 		future_if_result_publisher_ = rhs.future_if_result_publisher_;
 		future_else_result_publisher_ = rhs.future_else_result_publisher_;
+
+		delete subscription_callback_holder_;
+		subscription_callback_holder_ = rhs.subscription_callback_holder_;
 		rhs.subscription_callback_holder_ = nullptr;
 		return *this;
 	}
@@ -194,6 +281,11 @@ public:
 		{
 			return it->subscribe_channel();
 		}
+		if (auto it =
+				std::dynamic_pointer_cast<PublishManyForManyCanUnSubscribe<IfResult>>(future_if_result_publisher_))
+		{
+			return it->subscribe_channel();
+		}
 		return nullptr;
 	}
 
@@ -204,6 +296,11 @@ public:
 			return it->subscribe_channel();
 		}
 		if (auto it = std::dynamic_pointer_cast<PublishOneForMany<ElseResult>>(future_else_result_publisher_))
+		{
+			return it->subscribe_channel();
+		}
+		if (auto it =
+				std::dynamic_pointer_cast<PublishManyForManyCanUnSubscribe<ElseResult>>(future_else_result_publisher_))
 		{
 			return it->subscribe_channel();
 		}
@@ -227,7 +324,7 @@ public:
 		IfElseFutureNodeLogicHolder * subscription_holder,
 		std::string filename,
 		unsigned int line,
-		std::shared_ptr<IPublisher<ElseResult>> if_result_publisher,
+		std::shared_ptr<IPublisher<IfResult>> if_result_publisher,
 		std::shared_ptr<IPublisher<ElseResult>> else_result_publisher)
 		: filename_{std::move(filename)}
 		, line_{line}
@@ -243,7 +340,7 @@ public:
 private:
 	std::string filename_;
 	unsigned int line_;
-	IfElseFutureNodeLogicHolder * subscription_callback_holder_;
+	IfElseFutureNodeLogicHolder * subscription_callback_holder_{nullptr};
 	std::shared_ptr<IPublisher<IfResult>> future_if_result_publisher_;
 	std::shared_ptr<IPublisher<ElseResult>> future_else_result_publisher_;
 }; // IfElseFutureNodeLogic
@@ -268,7 +365,7 @@ public:
 	{
 	}
 
-	/*!
+	/**
 	 * Фабрика создания узла IfElseFutureNode
 	 * @param callback - логика обработки
 	 * @param protector - защита callback-а чтобы он вызывался только пока в этом ещё есть смысл
@@ -290,13 +387,18 @@ public:
 		std::string filename = __FILE__,
 		const unsigned int line = __LINE__,
 		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher = nullptr,
-		const std::uint32_t node_id = 0)
+		const std::uint32_t node_id = 0,
+		bool subscribers_can_unsubscribe = false)
 	{
 		auto if_result_publisher = [&]() -> std::shared_ptr<IPublisher<IfResult>>
 		{
 			if (highway->is_single_threaded())
 			{
 				return make_self_shared<PublishOneForMany<IfResult>>();
+			}
+			if (subscribers_can_unsubscribe)
+			{
+				return make_self_shared<PublishManyForManyCanUnSubscribe<IfResult>>();
 			}
 			return make_self_shared<PublishManyForMany<IfResult>>();
 		}();
@@ -306,6 +408,10 @@ public:
 			if (highway->is_single_threaded())
 			{
 				return make_self_shared<PublishOneForMany<ElseResult>>();
+			}
+			if (subscribers_can_unsubscribe)
+			{
+				return make_self_shared<PublishManyForManyCanUnSubscribe<ElseResult>>();
 			}
 			return make_self_shared<PublishManyForMany<ElseResult>>();
 		}();

@@ -1,50 +1,45 @@
 #include <thread_highways/include_all.h>
+#include <thread_highways/tools/cout_scope.h>
 
-#include <cassert>
-
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <memory>
-#include <string>
-
-void test_1()
-{
-	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
-	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::string>>();
-	auto highway_mailbox = highway->mailbox();
-	auto subscription_callback1 = hi::SubscriptionCallback<std::string>::create(
-		[](std::string publication, const std::atomic<std::uint32_t> &, const std::uint32_t)
-		{
-			std::cout << "test_1, publication = " << publication << std::endl;
-		},
-		highway->protector_for_tests_only(),
-		__FILE__,
-		__LINE__);
-	publisher->subscribe_channel()->subscribe(
-		hi::Subscription<std::string>::create(std::move(subscription_callback1), highway_mailbox));
-	hi::ISubscribeHerePtr<std::string> channel;
-	channel->subscribe(hi::Subscription<std::string>::create(std::move(subscription_callback1), highway_mailbox));
-	auto subscription_callback2 = hi::SubscriptionCallback<std::string>::create(
-		[](std::string publication, const std::atomic<std::uint32_t> &, const std::uint32_t)
-		{
-			std::cout << "test_2, publication = " << publication << std::endl;
-		},
-		highway->protector_for_tests_only(),
-		__FILE__,
-		__LINE__);
-	publisher->subscribe_channel()->subscribe(
-		hi::Subscription<std::string>::create(std::move(subscription_callback2), highway_mailbox));
-	publisher->publish(std::string{"Mother washed the frame"});
-
-	highway->flush_tasks();
-} // test_1
+#include <vector>
 
 int main(int /* argc */, char ** /* argv */)
 {
-	test_1();
+	hi::CoutScope scope("channels_publish_many_for_one");
 
-	std::cout << "Tests finished" << std::endl;
+	auto publisher = hi::make_self_shared<hi::PublishOneForMany<int>>();
+	auto channel = publisher->subscribe_channel();
 
+	const auto subscribe = [&](hi::IHighWayPtr highway)
+	{
+		hi::subscribe(
+			channel,
+			[&](int publication)
+			{
+				scope.print(std::to_string(publication));
+			},
+			highway->protector_for_tests_only(),
+			highway->mailbox());
+	};
+
+	std::vector<hi::IHighWayPtr> highways;
+	for (int i = 0; i < 10; ++i)
+	{
+		auto it = highways.emplace_back(hi::make_self_shared<hi::ConcurrentHighWay<>>());
+		subscribe(it);
+	}
+
+	for (int i = 0; i < 100; ++i)
+	{
+		publisher->publish(i);
+	}
+
+	for (auto && it : highways)
+	{
+		it->flush_tasks();
+		it->destroy();
+	}
+
+	std::cout << "Test finished" << std::endl;
 	return 0;
 }

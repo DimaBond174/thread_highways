@@ -1,71 +1,72 @@
 #include <thread_highways/include_all.h>
+#include <thread_highways/tools/cout_scope.h>
 
-#include <cassert>
-#include <chrono>
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <memory>
+#include <mutex>
+#include <set>
 
 using namespace std::chrono_literals;
 
-void increase_decrease_workers()
-{
-	auto logger = hi::create_default_logger(
-		[](std::string err)
-		{
-			std::cout << err << std::endl;
-		});
-
-	auto highway = hi::make_self_shared<hi::ConcurrentHighWayDebug<>>(
-		"ConcurrentHighWayDebug:increase_decrease_workers",
-		std::move(logger),
-		std::chrono::milliseconds{10},
-		std::chrono::milliseconds{100});
-
-	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
-	auto subscription_callback = hi::SubscriptionCallback<std::int32_t>::create(
-		[&](std::int32_t i, const std::atomic<std::uint32_t> &, const std::uint32_t)
-		{
-			std::this_thread::sleep_for(10ms);
-			std::cout << "\nmessage:" << i << std::endl;
-		},
-		highway->protector_for_tests_only(),
-		__FILE__,
-		__LINE__);
-	publisher->subscribe_channel()->subscribe(
-		hi::Subscription<std::int32_t>::create(std::move(subscription_callback), highway->mailbox()));
-
-	// will increase_workers()
-	for (std::int32_t i = 0; i < 100; ++i)
-	{
-		publisher->publish(i);
-		if (i % 10 == 0)
-		{
-			std::this_thread::sleep_for(100ms);
-		}
-	}
-
-	// will decrease_workers()
-	std::this_thread::sleep_for(5000ms);
-	// will increase_workers()
-	for (std::int32_t i = 0; i < 100; ++i)
-	{
-		publisher->publish(i);
-		if (i % 10 == 0)
-		{
-			std::this_thread::sleep_for(100ms);
-		}
-	}
-	highway->flush_tasks();
-	highway->destroy();
-} // monitor_and_repair_hungs_concurrent_highway
-
 int main(int /* argc */, char ** /* argv */)
 {
-	increase_decrease_workers();
+	hi::CoutScope scope("Example of scaling and shrinking threads");
+
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::ConcurrentHighWay<>>(
+		"HighWay",
+		nullptr,
+		10ms, // max_task_execution_time
+		1ms // workers_change_period
+		)};
+
+	highway.object_->set_max_concurrent_workers(8);
+
+	std::set<std::thread::id> threads_set;
+	std::mutex threads_set_protector;
+	const auto get_threads_cnt = [&]
+	{
+		std::lock_guard lg{threads_set_protector};
+		const auto re = threads_set.size();
+		threads_set.clear();
+		return re;
+	};
+
+	scope.print("Workload started\n================\n");
+	for (std::int32_t i = 0; i < 1000; ++i)
+	{
+		highway.object_->post(
+			[&]
+			{
+				{
+					std::lock_guard lg{threads_set_protector};
+					threads_set.insert(std::this_thread::get_id());
+				}
+				// Workload - heavy task for 10ms
+				std::this_thread::sleep_for(10ms);
+			});
+		if (0 == i % 10)
+		{
+			scope.print(std::string{"get_threads_cnt="}.append(std::to_string(get_threads_cnt())));
+		}
+		std::this_thread::sleep_for(1ms);
+	}
+
+	scope.print("Workload stopped\n================\n");
+	for (std::int32_t i = 0; i < 1000; ++i)
+	{
+		highway.object_->post(
+			[&]
+			{
+				{
+					std::lock_guard lg{threads_set_protector};
+					threads_set.insert(std::this_thread::get_id());
+				}
+			});
+		if (0 == i % 10)
+		{
+			scope.print(std::string{"get_threads_cnt="}.append(std::to_string(get_threads_cnt())));
+		}
+		std::this_thread::sleep_for(3ms);
+	}
 
 	std::cout << "Tests finished" << std::endl;
-
 	return 0;
 }

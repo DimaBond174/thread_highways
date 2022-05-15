@@ -1,21 +1,34 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef RUNNABLE_H
 #define RUNNABLE_H
 
 #include <thread_highways/tools/safe_invoke.h>
 
 #include <atomic>
+#include <cassert>
 #include <string>
 
 namespace hi
 {
 
-/*
-	Any Runnable
-	Has the right to execute while the your_run_id == highway_bundle.global_run_id_
-*/
+// A task for execution on highway.
 class Runnable
 {
 public:
+	/**
+	 * Creating a template task without a protector
+	 *
+	 * @param r - code to execute (must implements operator())
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 * @note filename and line will used for error and freeze logging
+	 */
 	template <typename R>
 	static Runnable create(R && r, std::string filename, unsigned int line)
 	{
@@ -25,6 +38,15 @@ public:
 				: r_{std::move(r)}
 			{
 			}
+
+			/**
+			 * Task execute interface
+			 *
+			 * @param global_run_id - identifier with which this highway works now
+			 * @param your_run_id - identifier with which this highway was running when this task started
+			 * @note if (global_run_id != your_run_id) then you must stop execution
+			 * @note using of global_run_id and your_run_id is optional
+			 */
 			void operator()(
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
@@ -33,16 +55,47 @@ public:
 				{
 					r_(global_run_id, your_run_id);
 				}
-				else
+				else if constexpr (std::is_invocable_v<R>)
 				{
 					r_();
 				}
+				else if constexpr (can_be_dereferenced<R &>::value)
+				{
+					auto && r = *r_;
+					if constexpr (std::is_invocable_v<
+									  decltype(r),
+									  const std::atomic<std::uint32_t> &,
+									  const std::uint32_t>)
+					{
+						r(global_run_id, your_run_id);
+					}
+					else
+					{
+						r();
+					}
+				}
+				else
+				{
+					// The callback signature must be one of the above
+					assert(false);
+				}
 			}
+
 			R r_;
 		};
 		return Runnable{new RunnableHolderImpl{std::move(r)}, std::move(filename), line};
 	}
 
+	/**
+	 * Creating a template task with a protector
+	 *
+	 * @param r - code to execute (must implements operator())
+	 * @param protector - object that implements the lock() operator
+	 * If the protector.lock() returned false, then the task will not be executed
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 * @note filename and line will used for error and freeze logging
+	 */
 	template <typename R, typename P>
 	static Runnable create(R && runnable, P protector, std::string filename, unsigned int line)
 	{
@@ -54,6 +107,14 @@ public:
 			{
 			}
 
+			/**
+			 * Task execute interface
+			 *
+			 * @param global_run_id - identifier with which this highway works now
+			 * @param your_run_id - identifier with which this highway was running when this task started
+			 * @note if (global_run_id != your_run_id) then you must stop execution
+			 * @note using of global_run_id and your_run_id is optional
+			 */
 			void operator()(
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
@@ -62,11 +123,32 @@ public:
 				{
 					safe_invoke_void(runnable_, protector_, global_run_id, your_run_id);
 				}
-				else
+				else if constexpr (std::is_invocable_v<R>)
 				{
 					safe_invoke_void(runnable_, protector_);
 				}
+				else if constexpr (can_be_dereferenced<R &>::value)
+				{
+					auto && r = *runnable_;
+					if constexpr (std::is_invocable_v<
+									  decltype(r),
+									  const std::atomic<std::uint32_t> &,
+									  const std::uint32_t>)
+					{
+						r(global_run_id, your_run_id);
+					}
+					else
+					{
+						r();
+					}
+				}
+				else
+				{
+					// The callback signature must be one of the above
+					assert(false);
+				}
 			}
+
 			R runnable_;
 			P protector_;
 		};
@@ -95,6 +177,7 @@ public:
 			return *this;
 		filename_ = std::move(rhs.filename_);
 		line_ = rhs.line_;
+		delete runnable_;
 		runnable_ = rhs.runnable_;
 		rhs.runnable_ = nullptr;
 		return *this;
@@ -131,7 +214,7 @@ private:
 
 	std::string filename_;
 	unsigned int line_;
-	RunnableHolder * runnable_;
+	RunnableHolder * runnable_{nullptr};
 };
 
 } // namespace hi

@@ -1,43 +1,40 @@
-#include <thread_highways/include_all.h>
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
 
-#include <cassert>
-#include <chrono>
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <memory>
+#include <thread_highways/include_all.h>
+#include <thread_highways/tools/cout_scope.h>
 
 using namespace std::chrono_literals;
 
-void serial_schedule()
+void schedule_simple_runnable()
 {
+	hi::CoutScope scope("schedule_simple_runnable()");
 	auto logger = hi::create_default_logger(
-		[](const std::string & err)
+		[&](const std::string & msg)
 		{
-			std::cout << err << std::endl;
+			scope.print(std::move(msg));
 		});
-	auto highway = hi::make_self_shared<hi::SerialHighWayWithScheduler<>>(
-		"SerialHighWay:serial_schedule",
+	auto highway = hi::make_self_shared<hi::SingleThreadHighWayWithScheduler<>>(
+		"SingleThreadHighWay:schedule_simple_runnable",
 		std::move(logger),
-		std::chrono::milliseconds{10},
-		std::chrono::milliseconds{10});
-
-	hi::HighWaysMonitoring monitoring{100ms};
-	monitoring.add_for_monitoring(highway);
+		10ms,
+		10ms);
 
 	std::promise<bool> promise;
 	auto future = promise.get_future();
-	highway->add_reschedulable_runnable(hi::ReschedulableRunnable::create(
-		[&, i = 0](
-			hi::ReschedulableRunnable::Schedule & schedule,
-			const std::atomic<std::uint32_t> &,
-			const std::uint32_t) mutable
+
+	highway->add_reschedulable_runnable(
+		[&, i = 0](hi::ReschedulableRunnable::Schedule & schedule) mutable
 		{
-			std::cout << "number of launches:" << ++i << std::endl;
-			std::this_thread::sleep_for(100ms);
+			++i;
+			scope.print(std::string{"number of launches: "}.append(std::to_string(i)));
 			if (i < 10)
 			{
-				schedule.schedule_launch_in(100ms);
+				schedule.schedule_launch_in(10ms);
 			}
 			else
 			{
@@ -45,18 +42,44 @@ void serial_schedule()
 			}
 		},
 		__FILE__,
-		__LINE__));
+		__LINE__);
 
 	future.wait();
 
 	highway->destroy();
-} // serial_schedule()
+} // schedule_simple_runnable()
+
+// Example of a regularly executed service
+void schedule_functor()
+{
+	auto highway =
+		hi::make_self_shared<hi::SerialHighWayWithScheduler<>>("SerialHighWay:serial_schedule", nullptr, 10ms, 10ms);
+
+	struct Service
+	{
+		void operator()(hi::ReschedulableRunnable::Schedule & schedule)
+		{
+			++starts_;
+			scope->print(std::to_string(starts_));
+			// Schedule next start
+			schedule.schedule_launch_in(50ms);
+		}
+
+		const std::shared_ptr<hi::CoutScope> scope{std::make_shared<hi::CoutScope>("Service")};
+		std::uint32_t starts_{0};
+	};
+
+	highway->add_reschedulable_runnable(Service{}, __FILE__, __LINE__);
+	std::this_thread::sleep_for(1s);
+
+	highway->destroy();
+} // schedule_functor()
 
 int main(int /* argc */, char ** /* argv */)
 {
-	serial_schedule();
+	schedule_simple_runnable();
+	schedule_functor();
 
 	std::cout << "Tests finished" << std::endl;
-
 	return 0;
 }

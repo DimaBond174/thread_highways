@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef EXECUTIONTREE_H
 #define EXECUTIONTREE_H
 
@@ -63,13 +70,18 @@ public:
 		tree_.push_back(std::move(node));
 	}
 
-private:
-	// todo канал в который узлы будут слать кто запустился
-	// сделать в Android демку где прокидывать Java узлы в дерево и
-	// анимировать ход исполнения -какие узлы запустились , какие остановились
-	// т.е. канал видимо со структурой из номера узла и состоянием
-	std::shared_ptr<PublishManyForMany<CurrentExecutedNode>> current_executed_node_publisher_;
+	INodePtr first_node()
+	{
+		return *tree_.begin();
+	}
 
+	void clear_tree()
+	{
+		tree_.clear();
+	}
+
+private:
+	std::shared_ptr<PublishManyForMany<CurrentExecutedNode>> current_executed_node_publisher_;
 	std::deque<INodePtr> tree_;
 };
 

@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef PUBLISH_ONE_FOR_MANY_H
 #define PUBLISH_ONE_FOR_MANY_H
 
@@ -13,7 +20,11 @@
 namespace hi
 {
 
-// реализация исходя из того что паблишер работает в 1м потоке
+/*!
+ * Один поток публикует для нескольких подписчиков
+ * (реализация исходя из того что паблишер работает в 1м потоке)
+ *
+ */
 template <typename Publication>
 class PublishOneForMany : public IPublisher<Publication>
 {
@@ -68,15 +79,12 @@ public:
 			line));
 	} // subscribe
 
-	bool subscribers_exist()
-	{
-		return !!subscriptions_safe_stack_.access_stack();
-	}
-
 public: // IPublisher
 	void publish(Publication publication) const override
 	{
+#ifndef NDEBUG
 		check_local_thread();
+#endif
 		subscriptions_safe_stack_.move_to(local_work_stack_);
 		SingleThreadStack<Holder<Subscription<Publication>>> local_tmp_stack;
 		while (Holder<Subscription<Publication>> * holder = local_work_stack_.pop())

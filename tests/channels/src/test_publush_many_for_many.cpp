@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #include <thread_highways/include_all.h>
 
 #include <gtest/gtest.h>
@@ -12,8 +19,10 @@ namespace hi
 {
 namespace
 {
-using publisher_types =
-	::testing::Types<PublishManyForManyCanUnSubscribe<std::uint32_t>, PublishManyForMany<std::uint32_t>>;
+using publisher_types = ::testing::Types<
+	PublishManyForManyCanUnSubscribe<std::uint32_t>,
+	PublishManyForManyWithConnectionsNotifier<std::uint32_t>,
+	PublishManyForMany<std::uint32_t>>;
 
 template <class T>
 struct TestPublushManyForMany : public ::testing::Test

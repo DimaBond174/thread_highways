@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef PUBLISH_MANY_FOR_MANY_CAN_UnSubscribe_H
 #define PUBLISH_MANY_FOR_MANY_CAN_UnSubscribe_H
 

@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef ReschedulableRunnable_H
 #define ReschedulableRunnable_H
 
@@ -12,18 +19,28 @@ namespace hi
 {
 
 /*
-	Runnable with self scheduling
-	Has the right to execute while the your_run_id == highway_bundle.global_run_id_
-		schedule  allows you to manage rescheduling yourself
-*/
+ * A task for execution on highway.
+ * This task can reschedule itself.
+ *
+ * For single threaded use only
+ */
 class ReschedulableRunnable
 {
 public:
+	// Schedule Management Structure
 	struct Schedule
 	{
-		bool rechedule_{false}; // == false before each run()
+		// true == should be rescheduled. Automatically set to false before each run
+		bool rechedule_{false};
+
+		// Point in time after which the task should be launched for execution
 		std::chrono::steady_clock::time_point next_execution_time_{}; // == run if less then now()
 
+		/**
+		 * Auxiliary method for setting launch after a specified period
+		 *
+		 * @param ms - will start after now() + ms milliseconds
+		 */
 		void schedule_launch_in(const std::chrono::milliseconds ms)
 		{
 			rechedule_ = true;
@@ -31,6 +48,14 @@ public:
 		}
 	};
 
+	/**
+	 * Creating a template task without a protector
+	 *
+	 * @param r - code to execute (must implements operator())
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 * @note filename and line will used for error and freeze logging
+	 */
 	template <typename R>
 	static ReschedulableRunnable create(R && r, std::string filename, unsigned int line)
 	{
@@ -40,6 +65,16 @@ public:
 				: r_{std::move(r)}
 			{
 			}
+
+			/**
+			 * Task execute interface
+			 *
+			 * @param schedule - Schedule Management Structure, change for schedule
+			 * @param global_run_id - identifier with which this highway works now
+			 * @param your_run_id - identifier with which this highway was running when this task started
+			 * @note if (global_run_id != your_run_id) then you must stop execution
+			 * @note using of global_run_id and your_run_id is optional
+			 */
 			void operator()(
 				Schedule & schedule,
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
@@ -65,8 +100,18 @@ public:
 		return ReschedulableRunnable{new RunnableHolderImpl{std::move(r)}, std::move(filename), line};
 	}
 
+	/**
+	 * Creating a template task with a protector
+	 *
+	 * @param r - code to execute (must implements operator())
+	 * @param protector - object that implements the lock() operator
+	 * If the protector.lock() returned false, then the task will not be executed
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 * @note filename and line will used for error and freeze logging
+	 */
 	template <typename R, typename P>
-	static ReschedulableRunnable create(R && runnable, P && protector, std::string filename, unsigned int line)
+	static ReschedulableRunnable create(R && runnable, P protector, std::string filename, unsigned int line)
 	{
 		struct RunnableProtectedHolderImpl : public RunnableHolder
 		{
@@ -76,6 +121,15 @@ public:
 			{
 			}
 
+			/**
+			 * Task execute interface
+			 *
+			 * @param schedule - Schedule Management Structure, change for schedule
+			 * @param global_run_id - identifier with which this highway works now
+			 * @param your_run_id - identifier with which this highway was running when this task started
+			 * @note if (global_run_id != your_run_id) then you must stop execution
+			 * @note using of global_run_id and your_run_id is optional
+			 */
 			void operator()(
 				Schedule & schedule,
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
@@ -124,6 +178,7 @@ public:
 			return *this;
 		filename_ = std::move(rhs.filename_);
 		line_ = rhs.line_;
+		delete runnable_;
 		runnable_ = rhs.runnable_;
 		rhs.runnable_ = nullptr;
 		return *this;
@@ -168,7 +223,7 @@ private:
 
 	std::string filename_;
 	unsigned int line_;
-	RunnableHolder * runnable_;
+	RunnableHolder * runnable_{nullptr};
 	Schedule schedule_;
 };
 

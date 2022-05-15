@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef SerialHighWayDebug_H
 #define SerialHighWayDebug_H
 
@@ -10,11 +17,16 @@ namespace hi
 {
 
 /*
-	Магистраль с последовательным выполнением задач.
-	Гарантирует что задачи будут стартовать одна за другой,
-	но не гарантирует однопоточность так как в случае саморемонта
-	зависшего потока будет запущен новый поток
-	 (в то время как старый может ещё работать).
+	Highway with sequential execution of tasks.
+	Ensures that tasks will start one after the other,
+	but does not guarantee single-threading, as in the case of self-repair
+	hung thread will start a new thread
+	(while the old one might still work).
+
+	To some extent, the highway can be considered single-threaded,
+	since self-repair is an abnormal behavior that should not be.
+
+	SerialHighWayDebug provides additional logging.
 */
 template <typename FreeTimeLogic = FreeTimeLogicDefault>
 class SerialHighWayDebug : public IHighWay

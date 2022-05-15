@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #include <thread_highways/include_all.h>
 
 #include <gtest/gtest.h>
@@ -31,7 +38,7 @@ TEST(TestOperationWithTwoOperandsFutureNode, StringConcatenation)
 	highway.object_->flush_tasks();
 }
 
-TEST(TestOperationWithTwoOperandsFutureNode, MultipleСalls)
+TEST(TestOperationWithTwoOperandsFutureNode, MultipleCalls)
 {
 	RAIIdestroy highway{hi::make_self_shared<hi::ConcurrentHighWay<>>()};
 

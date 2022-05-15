@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef VoidFutureNode_H
 #define VoidFutureNode_H
 
@@ -57,9 +64,47 @@ public:
 				{
 					safe_invoke_void(callback_, protector_, result_publisher);
 				}
-				else
+				else if constexpr (std::is_invocable_v<R>)
 				{
 					safe_invoke_void(callback_, protector_);
+				}
+				else if constexpr (can_be_dereferenced<R &>::value)
+				{
+					auto && callback = *callback_;
+					if constexpr (std::is_invocable_v<
+									  decltype(callback),
+									  IPublisher<Result> &,
+									  INode &,
+									  const std::atomic<std::uint32_t> &,
+									  const std::uint32_t>)
+					{
+						safe_invoke_void(callback, protector_, result_publisher, node, global_run_id, your_run_id);
+					}
+					else if constexpr (std::is_invocable_v<decltype(callback), IPublisher<Result> &, INode &>)
+					{
+						safe_invoke_void(callback, protector_, result_publisher, node);
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   IPublisher<Result> &,
+										   const std::atomic<std::uint32_t> &,
+										   const std::uint32_t>)
+					{
+						safe_invoke_void(callback, protector_, result_publisher, global_run_id, your_run_id);
+					}
+					else if constexpr (std::is_invocable_v<decltype(callback), IPublisher<Result> &>)
+					{
+						safe_invoke_void(callback, protector_, result_publisher);
+					}
+					else
+					{
+						safe_invoke_void(callback, protector_);
+					}
+				}
+				else
+				{
+					// The callback signature must be one of the above
+					assert(false);
 				}
 			}
 
@@ -102,8 +147,9 @@ public:
 			return *this;
 		filename_ = std::move(rhs.callback_);
 		line_ = rhs.line_;
-		subscription_callback_holder_ = rhs.subscription_callback_holder_;
 		future_result_publisher_ = rhs.future_result_publisher_;
+		delete subscription_callback_holder_;
+		subscription_callback_holder_ = rhs.subscription_callback_holder_;
 		rhs.subscription_callback_holder_ = nullptr;
 		return *this;
 	}
@@ -138,6 +184,10 @@ public:
 		{
 			return it->subscribe_channel();
 		}
+		if (auto it = std::dynamic_pointer_cast<PublishManyForManyCanUnSubscribe<Result>>(future_result_publisher_))
+		{
+			return it->subscribe_channel();
+		}
 		return nullptr;
 	}
 
@@ -169,7 +219,7 @@ public:
 private:
 	std::string filename_;
 	unsigned int line_;
-	VoidFutureNodeLogicHolder * subscription_callback_holder_;
+	VoidFutureNodeLogicHolder * subscription_callback_holder_{nullptr};
 	std::shared_ptr<IPublisher<Result>> future_result_publisher_;
 }; // VoidFutureNodeLogic
 
@@ -208,13 +258,18 @@ public:
 		std::string filename = __FILE__,
 		const unsigned int line = __LINE__,
 		IPublisherPtr<CurrentExecutedNode> current_executed_node_publisher = nullptr,
-		const std::uint32_t node_id = 0)
+		const std::uint32_t node_id = 0,
+		bool subscribers_can_unsubscribe = false)
 	{
 		auto publisher = [&]() -> std::shared_ptr<IPublisher<Result>>
 		{
 			if (highway->is_single_threaded())
 			{
 				return make_self_shared<PublishOneForMany<Result>>();
+			}
+			if (subscribers_can_unsubscribe)
+			{
+				return make_self_shared<PublishManyForManyCanUnSubscribe<Result>>();
 			}
 			return make_self_shared<PublishManyForMany<Result>>();
 		}();

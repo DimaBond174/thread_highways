@@ -1,4 +1,4 @@
-set(EXE_NAME  "highways_simple_with_protector")
+set(EXE_NAME  "connections_notifier")
 
 file(GLOB_RECURSE EXE_SRC
        ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp

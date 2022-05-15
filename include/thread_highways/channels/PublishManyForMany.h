@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef PUBLISH_MANY_FOR_MANY_H
 #define PUBLISH_MANY_FOR_MANY_H
 
@@ -11,6 +18,11 @@
 namespace hi
 {
 
+/*!
+ * Несколько потоков публикуют для нескольких подписчиков
+ * (реализация исходя из того что паблишер работает в любом потоке)
+ *
+ */
 template <typename Publication>
 class PublishManyForMany : public IPublisher<Publication>
 {

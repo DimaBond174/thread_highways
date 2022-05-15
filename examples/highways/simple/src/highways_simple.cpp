@@ -1,135 +1,154 @@
 #include <thread_highways/include_all.h>
+#include <thread_highways/tools/cout_scope.h>
 
-#include <cassert>
+#include <future>
 
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <memory>
+using namespace std::chrono_literals;
 
-void test_highways(
-	std::shared_ptr<hi::IHighWay> highway1,
-	std::shared_ptr<hi::IHighWay> highway2,
-	std::shared_ptr<hi::IHighWay> highway3)
+void post_lambda_on_highway()
 {
-	struct Message
-	{
-		std::uint32_t message_id_;
-		std::uint32_t loop_id_;
-	};
+	hi::CoutScope scope("post_lambda_on_highway()");
 
-	auto message1 = std::make_unique<Message>(Message{1, 0});
-	auto message2 = std::make_unique<Message>(Message{2, 0});
-	auto message3 = std::make_unique<Message>(Message{3, 0});
+	// Create executor
+	const auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 
-	auto highway1_mailbox = highway1->mailbox();
-	auto highway2_mailbox = highway2->mailbox();
-	auto highway3_mailbox = highway3->mailbox();
+	// Some data that task need to work
+	auto unique = std::make_unique<std::string>("hello to std::function<> ;))");
 
-	// must run on highway1
-	std::function<void(std::unique_ptr<Message> &&)> resender1;
-	// must run on highway2
-	std::function<void(std::unique_ptr<Message> &&)> resender2;
-	// must run on highway3
-	std::function<void(std::unique_ptr<Message> &&)> resender3;
-
-	resender1 = [&](std::unique_ptr<Message> && message)
-	{
-		assert(highway1->current_execution_on_this_highway());
-		++message->loop_id_;
-		highway2_mailbox->send_may_blocked(hi::Runnable::create(
-			[&, message = std::move(message)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
-			{
-				resender2(std::move(message));
-			},
-			__FILE__,
-			__LINE__));
-	};
-
-	resender2 = [&](std::unique_ptr<Message> && message)
-	{
-		assert(highway2->current_execution_on_this_highway());
-		++message->loop_id_;
-		highway3_mailbox->send_may_blocked(hi::Runnable::create(
-			[&, message = std::move(message)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
-			{
-				resender3(std::move(message));
-			},
-			__FILE__,
-			__LINE__));
-	};
-
-	resender3 = [&](std::unique_ptr<Message> && message)
-	{
-		assert(highway3->current_execution_on_this_highway());
-		++message->loop_id_;
-		if (message->loop_id_ % 10 == 0)
+	// Post task
+	highway->post(
+		[&, unique = std::move(unique)]
 		{
-			std::cout << "message.message_id_=" << message->message_id_ << ", message.loop_id_=" << message->loop_id_
-					  << std::endl;
+			scope.print(std::string{"unique: "}.append(*unique));
+		});
+
+	// Let's wait until the highway completes all the posted tasks
+	highway->flush_tasks();
+
+	// Stop threads
+	highway->destroy();
+} // post_lambda_on_highway
+
+// Example demonstrates canceling tasks
+void using_protector()
+{
+	const auto scope = std::make_shared<hi::CoutScope>("using_protector()");
+
+	// Create executor
+	const auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
+
+	struct SelfProtectedTask
+	{
+		SelfProtectedTask(
+			std::weak_ptr<SelfProtectedTask> self_weak,
+			std::string message,
+			hi::IHighWayPtr highway,
+			std::shared_ptr<hi::CoutScope> scope)
+			: self_weak_{std::move(self_weak)}
+			, message_{std::move(message)}
+			, highway_{std::move(highway)}
+			, scope_{std::move(scope)}
+		{
+			/*
+				Usually subscriptions and regular tasks are created directly in the service constructor
+				But these tasks should not live longer than the service object itself.
+				Here we use {self_weak_} as a protector.
+			*/
+			highway_->post(
+				[&]
+				{
+					scope_->print(message_);
+				},
+				self_weak_);
 		}
 
-		highway1_mailbox->send_may_blocked(hi::Runnable::create(
-			[&, message = std::move(message)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
-			{
-				resender1(std::move(message));
-			},
-			__FILE__,
-			__LINE__));
+		const std::weak_ptr<SelfProtectedTask> self_weak_;
+		const std::string message_;
+		const hi::IHighWayPtr highway_;
+		const std::shared_ptr<hi::CoutScope> scope_;
 	};
 
-	// ЗАПУСК
-	highway1_mailbox->send_may_blocked(hi::Runnable::create(
-		[&, message = std::move(message1)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
-		{
-			resender1(std::move(message));
-		},
-		__FILE__,
-		__LINE__));
+	{ // scope
+		auto service1 = hi::make_self_shared<SelfProtectedTask>("service1 shouldn't start", highway, scope);
+	}
+	auto service2 = hi::make_self_shared<SelfProtectedTask>("service2 must start", highway, scope);
 
-	highway2_mailbox->send_may_blocked(hi::Runnable::create(
-		[&, message = std::move(message2)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
-		{
-			resender2(std::move(message));
-		},
-		__FILE__,
-		__LINE__));
+	// Let's wait until the highway completes all the posted tasks
+	highway->flush_tasks();
 
-	highway3_mailbox->send_may_blocked(hi::Runnable::create(
-		[&, message = std::move(message3)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
-		{
-			resender3(std::move(message));
-		},
-		__FILE__,
-		__LINE__));
+	// Stop threads
+	highway->destroy();
+} // using_protector
 
-	std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-
-	// Либо необходимо явно вызывать destroy(),
-	// либо Runnable должны передаваться с protector (см. simple_highways_with_protector.cpp)
-	// чтобы хайвеи не начали разрушаться до того как отработают ссылающиеся на них лямбды
-	highway1->destroy();
-	highway2->destroy();
-	highway3->destroy();
-} // test_highways
-
-void test_highways_with_custom_main_loop_runnable()
+// Example demonstrates highway capacity building
+void multithreading()
 {
-	std::cout << "====================================" << std::endl;
-	std::cout << "test_highways_with_custom_main_loop_runnable" << std::endl;
-	std::cout << "====================================" << std::endl;
-	test_highways(
-		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>(),
-		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>(),
-		hi::make_self_shared<hi::SerialHighWay<hi::FreeTimeLogicCustomExample>>());
-	std::cout << "-----------------------------------------------------------------------" << std::endl;
-} // test_highways_with_custom_main_loop_runnable
+	hi::CoutScope scope("multithreading()");
+
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::ConcurrentHighWay<>>(
+		"HighWay",
+		hi::create_default_logger(
+			[&](std::string msg)
+			{
+				scope.print(std::move(msg));
+			}),
+		10ms, // max_task_execution_time
+		1ms // workers_change_period
+		)};
+
+	for (std::int32_t i = 0; i < 100; ++i)
+	{
+		highway.object_->post(
+			[&, i]
+			{
+				scope.print(std::to_string(i));
+				std::this_thread::sleep_for(10ms);
+			});
+	}
+
+	highway.object_->flush_tasks();
+} // multithreading
+
+// Example demonstrates stopping a long-running task
+void long_running_task()
+{
+	hi::CoutScope scope("long_running_task()");
+
+	std::promise<bool> start_promise;
+	auto start_future = start_promise.get_future();
+
+	std::promise<bool> stop_promise;
+	auto stop_future = stop_promise.get_future();
+
+	{
+		hi::RAIIdestroy highway{hi::make_self_shared<hi::SingleThreadHighWay<>>()};
+
+		highway.object_->post(
+			[&](const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id)
+			{
+				// Say task started
+				start_promise.set_value(true);
+				// Long running algorithm
+				while (global_run_id == your_run_id)
+				{
+					std::this_thread::sleep_for(10ms);
+				}
+				// Say task stopped
+				stop_promise.set_value(true);
+			});
+		scope.print(std::string{"Task started:"}.append(std::to_string(start_future.get())));
+	}
+
+	scope.print(std::string{"Task stopped:"}.append(std::to_string(stop_future.get())));
+} // long_running_task
 
 int main(int /* argc */, char ** /* argv */)
 {
-	test_highways_with_custom_main_loop_runnable();
+	post_lambda_on_highway();
+	using_protector();
+	multithreading();
+	long_running_task();
 
 	std::cout << "Tests finished" << std::endl;
-
 	return 0;
 }

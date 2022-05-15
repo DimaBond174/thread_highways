@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef SerialHighWayWithScheduler_H
 #define SerialHighWayWithScheduler_H
 
@@ -11,18 +18,34 @@ namespace hi
 {
 
 /*
-	Магистраль с последовательным выполнением задач.
-	Гарантирует что задачи будут стартовать одна за другой,
-	но не гарантирует однопоточность так как в случае саморемонта
-	зависшего потока будет запущен новый поток
-	 (в то время как старый может ещё работать).
-	На этой магистрали можно разместить задачи который будут выполняться
-	по расписанию.
+	Highway with sequential execution of tasks.
+	Ensures that tasks will start one after the other,
+	but does not guarantee single-threading, as in the case of self-repair
+	hung thread will start a new thread
+	(while the old one might still work).
+
+	To some extent, the highway can be considered single-threaded,
+	since self-repair is an abnormal behavior that should not be.
+
+	On this highway, you can place tasks that will be performed scheduled.
 */
 template <typename FreeTimeLogic = FreeTimeLogicDefault>
 class SerialHighWayWithScheduler : public IHighWay
 {
 public:
+	/**
+	 * Highway constructor.
+	 * The thread starts immediately.
+	 *
+	 * @param self_protector - ensures that the object will not be destroyed
+	 *  until the threads are stopped
+	 * @param highway_name - identifier of this highway in the logging system
+	 * @param logger - logger
+	 * @param max_task_execution_time - time after which the executable task
+	 * will be considered hung
+	 * @param timer_executes_each_ns - the frequency with which it is checked
+	 * whether the time has come to execute the task
+	 */
 	SerialHighWayWithScheduler(
 		std::shared_ptr<SerialHighWayWithScheduler> self_protector,
 		std::string highway_name = "SerialHighWayWithScheduler",
@@ -41,9 +64,27 @@ public:
 		bundle_.log("destroyed", __FILE__, __LINE__);
 	}
 
+	/**
+	 * Adding a reschedulable task
+	 *
+	 * @param runnable - reschedulable task
+	 */
 	void add_reschedulable_runnable(ReschedulableRunnable && runnable)
 	{
 		schedule_stack_.push(new hi::Holder<ReschedulableRunnable>(std::move(runnable)));
+	}
+
+	template <typename R>
+	void add_reschedulable_runnable(R && r, std::string filename, const unsigned int line)
+	{
+		add_reschedulable_runnable(hi::ReschedulableRunnable::create(std::move(r), std::move(filename), line));
+	}
+
+	template <typename R, typename P>
+	void add_reschedulable_runnable(R && r, P protector, std::string filename, const unsigned int line)
+	{
+		add_reschedulable_runnable(
+			hi::ReschedulableRunnable::create(std::move(r), std::move(protector), std::move(filename), line));
 	}
 
 	bool current_execution_on_this_highway() override

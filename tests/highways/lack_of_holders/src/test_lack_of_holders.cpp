@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #include <thread_highways/include_all.h>
 
 #include <gtest/gtest.h>
@@ -190,25 +197,10 @@ TYPED_TEST(TestLackOfHolders, TwoHighwaysWithPublishers)
 		false,
 		__FILE__,
 		__LINE__);
-	//	hi::subscribe(
-	//		publisher1->subscribe_channel(),
-	//		highway2,
-	//		[&](std::shared_ptr<Message> message)
-	//		{
-	//			EXPECT_TRUE(highway2->current_execution_on_this_highway());
-	//			message->message_loop_id_++;
-	//			publisher2->publish(std::move(message));
-	//		},
-	//		false,
-	//		__FILE__,
-	//		__LINE__);
 
 	publisher2->subscribe(
-		[&](std::shared_ptr<Message> message,
-			const std::atomic<std::uint32_t> & global_run_id,
-			const std::uint32_t your_run_id)
+		[&](std::shared_ptr<Message> message)
 		{
-			EXPECT_EQ(global_run_id, your_run_id);
 			EXPECT_TRUE(highway1->current_execution_on_this_highway());
 			std::this_thread::sleep_for(std::chrono::milliseconds{10});
 			message->message_loop_id_++;
@@ -219,32 +211,11 @@ TYPED_TEST(TestLackOfHolders, TwoHighwaysWithPublishers)
 		false,
 		__FILE__,
 		__LINE__);
-	//	hi::subscribe(
-	//		publisher2->subscribe_channel(),
-	//		highway1,
-	//		[&](std::shared_ptr<Message> message,
-	//			const std::atomic<std::uint32_t> & global_run_id,
-	//			const std::uint32_t your_run_id)
-	//		{
-	//			// hi::subscrube может принимать на исполнение длительные задачи в которых необходимо
-	//			// уметь мониторить сигнал об остановке хайвея (когда global_run_id != your_run_id)
-	//			EXPECT_EQ(global_run_id, your_run_id);
-	//			EXPECT_TRUE(highway1->current_execution_on_this_highway());
-	//			std::this_thread::sleep_for(std::chrono::milliseconds{10});
-	//			message->message_loop_id_++;
-	//			publisher1->publish(std::move(message));
-	//		},
-	//		false,
-	//		__FILE__,
-	//		__LINE__);
 
 	// Запускаем цикл
 	hi::execute(
-		[&](const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id)
+		[&]()
 		{
-			// hi::execute может принимать на исполнение длительные задачи в которых необходимо
-			// уметь мониторить сигнал об остановке хайвея (когда global_run_id != your_run_id)
-			EXPECT_EQ(global_run_id, your_run_id);
 			publisher1->publish(std::move(message1));
 		},
 		highway1);

@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef APPLE_THREADS_H
 #define APPLE_THREADS_H
 
@@ -7,6 +14,8 @@
 #include <pthread.h>
 
 namespace hi
+{
+namespace
 {
 
 void set_this_thread_name(const std::string & name)
@@ -24,6 +33,7 @@ std::string get_this_thread_name()
 	return re;
 }
 
+} // namespace
 } // namespace hi
 
 #endif // APPLE_THREADS_H

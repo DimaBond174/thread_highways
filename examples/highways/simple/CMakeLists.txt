@@ -1,4 +1,5 @@
 set(EXE_NAME  "highways_simple")
+message(STATUS "building ${EXE_NAME}")
 
 file(GLOB_RECURSE EXE_SRC
        ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp

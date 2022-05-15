@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef PUBLISHFROMBUFFEREDRETRANSMITTER_H
 #define PUBLISHFROMBUFFEREDRETRANSMITTER_H
 
@@ -11,6 +18,11 @@
 namespace hi
 {
 
+/**
+ * PublicationHolder
+ *
+ * Wrapper for storing a publication under a mutex or in an atomic
+ */
 template <typename Publication, bool>
 struct PublicationHolder;
 
@@ -49,18 +61,17 @@ struct PublicationHolder<Publication, false>
 	Publication value_{};
 };
 
-/*
-Подписывается к Паблишеру и хранит последнее сообщение.
-Когда сообщение приходит, то ретранслирует сообщение своим подписчикам.
-Кроме этого хранит последнее сообщение у себя локально.
-Можно сразу заполнить значение в коструторе (дефолтное).
-
-resend_to_just_connected = необходимо ли сразу слать тому кто только что подключился
-send_new_only = слать ли только новые значения
-Если необходимо resend_to_just_connected, но при этом нет дефолтного значения,
-тогда для такoго случая следует использовать Publication = std::optional<Publication> или std::shared_ptr<Publication>
- - если пришло пустое, значит нет ещё значения
-*/
+/**
+ * BufferedRetransmitter
+ *
+ * Subscribes to the Publisher and stores the latest message.
+ * Relays the message to its subscribers according to the settings:
+ * resend_to_just_connected = true, if you need to send a latest message to new subscribers
+ * send_new_only = true, if it is necessary to filter messages
+ *	and forward only if the data has changed since the last message
+ * @note if necessary to keep the original message null, then use
+ *	Publication as std::optional<Publication> or std::shared_ptr<Publication>
+ */
 template <typename Publication, bool resend_to_just_connected = true, bool send_new_only = true>
 class BufferedRetransmitter
 {

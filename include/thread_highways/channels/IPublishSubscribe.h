@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef I_PUBLISHER_H
 #define I_PUBLISHER_H
 
@@ -288,6 +295,7 @@ public:
 	{
 		if (this == &rhs)
 			return *this;
+		delete subscription_holder_;
 		subscription_holder_ = rhs.subscription_holder_;
 		assert(subscription_holder_);
 		rhs.subscription_holder_ = nullptr;
@@ -312,7 +320,7 @@ public:
 	}
 
 private:
-	SubscriptionHolder * subscription_holder_;
+	SubscriptionHolder * subscription_holder_{nullptr};
 }; // Subscription
 
 /*
@@ -338,22 +346,25 @@ struct IPublisher
 {
 	virtual ~IPublisher() = default;
 
+	//! Разослать подписчикам publication (каждый подписчик получает в своём потоке)
 	virtual void publish(Publication publication) const = 0;
 };
 
 template <typename Publication>
 using IPublisherPtr = std::shared_ptr<IPublisher<Publication>>;
 
-/*!
-	Обобщающая функция создания подписки
-	@param subscribe_channel - канал на который следует подписаться
-	@param callback - колбэк обработчика публикации
-	@param protector - защита подписки (способ прекратить подписку)
-	@param highway - экзекутор на котором должен выполняться код колбэка
-	@param send_may_fail - можно пропустить отправку если на хайвее подписчика закончились холдеры сообщений
-	@param filename - координаты кода для отладки
-	@param line - координаты кода для отладки
-*/
+/**
+ * Subscribing to a channel
+ *
+ * @param subscribe_channel - channel to subscribe to
+ * @param callback - publish handler callback
+ * @param protector - subscription protection (a way to terminate a subscription)
+ * @param highway_mailbox - executor mailbox on which the callback code should be executed
+ * @param send_may_fail - is it permissible to skip (lose sight of) publications?
+ *	(some tasks can be skipped if there is not enough RAM)
+ * @param filename - file where the code is located
+ * @param line - line in the file that contains the code
+ */
 template <typename Publication, typename R, typename P>
 void subscribe(
 	ISubscribeHere<Publication> & subscribe_channel,
@@ -371,41 +382,66 @@ void subscribe(
 		send_may_fail,
 		std::move(filename),
 		line));
+}
 
-	//	struct RunnableHolder
-	//	{
-	//		RunnableHolder(R && r)
-	//			: r_{std::move(r)}
-	//		{
-	//		}
+/**
+ * Subscribing to a channel
+ *
+ * @param subscribe_channel - channel to subscribe to
+ * @param callback - publish handler callback
+ * @param protector - subscription protection (a way to terminate a subscription)
+ * @param highway_mailbox - executor mailbox on which the callback code should be executed
+ * @param send_may_fail - is it permissible to skip (lose sight of) publications?
+ *	(some tasks can be skipped if there is not enough RAM)
+ * @param filename - file where the code is located
+ * @param line - line in the file that contains the code
+ */
+template <typename Publication, typename R, typename P>
+void subscribe(
+	ISubscribeHerePtr<Publication> subscribe_channel,
+	R && callback,
+	P protector,
+	IHighWayMailBoxPtr highway_mailbox,
+	const bool send_may_fail = true,
+	std::string filename = __FILE__,
+	const unsigned int line = __LINE__)
+{
+	subscribe(
+		*subscribe_channel,
+		std::move(callback),
+		std::move(protector),
+		std::move(highway_mailbox),
+		send_may_fail,
+		std::move(filename),
+		line);
+}
 
-	//		void operator()(
-	//			Publication publication,
-	//			[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
-	//			[[maybe_unused]] const std::uint32_t your_run_id)
-	//		{
-	//			if constexpr (std::is_invocable_v<R, Publication, const std::atomic<std::uint32_t> &, const
-	//std::uint32_t>)
-	//			{
-	//				r_(publication, global_run_id, your_run_id);
-	//			}
-	//			else
-	//			{
-	//				r_(publication);
-	//			}
-	//		}
+template <typename Publication, typename Protector>
+Subscription<Publication> protect(Subscription<Publication> && subscription, Protector protector)
+{
+	struct SubscriptionProtectedHolderImpl : public Subscription<Publication>::SubscriptionHolder
+	{
+		SubscriptionProtectedHolderImpl(Subscription<Publication> && subscription, Protector protector)
+			: subscription_{std::move(subscription)}
+			, protector_{std::move(protector)}
+		{
+		}
 
-	//		R r_;
-	//	};
+		bool operator()(Publication publication) override
+		{
+			if (auto lock = protector_.lock())
+			{
+				return subscription_.send(std::move(publication));
+			}
+			return false;
+		}
 
-	//	auto subscription_callback = hi::SubscriptionCallback<Publication>::create(
-	//		RunnableHolder{std::move(callback)},
-	//		std::move(protector),
-	//		std::move(filename),
-	//		line);
-	//	subscribe_channel.subscribe(
-	//		hi::Subscription<Publication>::create(std::move(subscription_callback), std::move(highway_mailbox),
-	//send_may_fail));
+		Subscription<Publication> subscription_;
+		Protector protector_;
+	};
+
+	return Subscription<Publication>{
+		new SubscriptionProtectedHolderImpl{std::move(subscription), std::move(protector)}};
 }
 
 } // namespace hi

@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #include <thread_highways/include_all.h>
 
 #include <gtest/gtest.h>
@@ -246,6 +253,39 @@ TEST(TestFutureNode, Protector)
 
 	EXPECT_GT(subscriber1_signal, 10);
 	EXPECT_LT(subscriber2_signal, 10);
+}
+
+TEST(TestFutureNode, WithFunctor)
+{
+	RAIIdestroy highway{hi::make_self_shared<hi::SingleThreadHighWay<>>()};
+	const std::int32_t expected{100500};
+	struct Fun
+	{
+		void operator()(std::int32_t param, hi::IPublisher<std::int32_t> & result_publisher)
+		{
+			result_publisher.publish(param + local_);
+		}
+		const std::int32_t local_{500};
+	};
+	auto future_node = hi::FutureNode<std::int32_t, std::int32_t>::create(
+		Fun{},
+		highway.object_->protector_for_tests_only(),
+		highway.object_);
+
+	std::promise<std::int32_t> future_result;
+	auto future_result_ready = future_result.get_future();
+
+	hi::subscribe(
+		*future_node->result_channel(),
+		[&](std::int32_t publication) mutable
+		{
+			future_result.set_value(publication);
+		},
+		highway.object_->protector_for_tests_only(),
+		highway.object_->mailbox());
+
+	future_node->subscription().send(expected - 500);
+	EXPECT_EQ(future_result_ready.get(), expected);
 }
 
 } // namespace hi

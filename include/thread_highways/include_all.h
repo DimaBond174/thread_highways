@@ -1,7 +1,10 @@
 /*
-	Header only library for building the architecture of inter thread communication and execution
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
 
-*/
 #ifndef THREAD_HIGHWAYS_H
 #define THREAD_HIGHWAYS_H
 
@@ -10,8 +13,10 @@
 #include <thread_highways/channels/BufferedRetransmitter.h>
 #include <thread_highways/channels/PublishManyForMany.h>
 #include <thread_highways/channels/PublishManyForManyCanUnSubscribe.h>
+#include <thread_highways/channels/PublishManyForManyWithConnectionsNotifier.h>
 #include <thread_highways/channels/PublishManyForOne.h>
 #include <thread_highways/channels/PublishOneForMany.h>
+#include <thread_highways/channels/PublishOneForManyWithConnectionsNotifier.h>
 
 #include <thread_highways/execution_tree/AggregatingFutureNode.h>
 #include <thread_highways/execution_tree/ExecutionTree.h>

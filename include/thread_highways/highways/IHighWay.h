@@ -1,3 +1,10 @@
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
 #ifndef IHIGHWAY_H
 #define IHIGHWAY_H
 
@@ -144,8 +151,21 @@ public:
 		return std::make_shared<MailBoxSendHere>(self_weak_);
 	}
 
+	/**
+	 * Setting a task for execution
+	 *
+	 * @param r - task for execution
+	 * @param send_may_fail - is this task required to be completed?
+	 *	(some tasks can be skipped if there is not enough RAM)
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 */
 	template <typename R>
-	void post(R && r, const bool send_may_fail, std::string filename, const unsigned int line)
+	void post(
+		R && r,
+		const bool send_may_fail = true,
+		std::string filename = __FILE__,
+		const unsigned int line = __LINE__)
 	{
 		auto runnable = Runnable::create<R>(std::move(r), std::move(filename), line);
 		if (send_may_fail)
@@ -158,8 +178,23 @@ public:
 		}
 	}
 
+	/**
+	 * Setting a task for execution
+	 *
+	 * @param r - task for execution
+	 * @param protector - task protection (a way to cancel task)
+	 * @param send_may_fail - is this task required to be completed?
+	 *	(some tasks can be skipped if there is not enough RAM)
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 */
 	template <typename R, typename P>
-	void post(R && r, P protector, const bool send_may_fail, std::string filename, const unsigned int line)
+	void post(
+		R && r,
+		P protector,
+		const bool send_may_fail = true,
+		std::string filename = __FILE__,
+		const unsigned int line = __LINE__)
 	{
 		auto runnable = Runnable::create<R>(std::move(r), std::move(protector), std::move(filename), line);
 		if (send_may_fail)
@@ -237,6 +272,8 @@ protected:
 	HighWayBundle bundle_;
 };
 
+using IHighWayPtr = std::shared_ptr<IHighWay>;
+
 /*!
 	Обобщающая функция запуска Runnable на хайвее
 	@param callback - колбэк обработчика публикации
@@ -247,7 +284,7 @@ protected:
 template <typename R>
 void execute(
 	R && callback,
-	std::shared_ptr<IHighWay> highway,
+	IHighWayPtr highway,
 	const bool send_may_fail = false,
 	std::string filename = __FILE__,
 	const unsigned int line = __LINE__)

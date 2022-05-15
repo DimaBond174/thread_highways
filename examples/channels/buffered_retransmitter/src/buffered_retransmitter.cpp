@@ -1,11 +1,7 @@
 #include <thread_highways/include_all.h>
+#include <thread_highways/tools/cout_scope.h>
 
-#include <cassert>
-#include <chrono>
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <memory>
+#include <future>
 #include <string>
 
 using namespace std::chrono_literals;
