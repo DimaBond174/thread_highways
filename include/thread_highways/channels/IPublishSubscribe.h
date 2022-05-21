@@ -38,7 +38,32 @@ public:
 			{
 			}
 
-			void operator()(
+			bool has_run_id_control() const noexcept override
+			{
+				if constexpr (
+					std::is_invocable_v<R, Publication, const std::atomic<std::uint32_t> &, const std::uint32_t>)
+				{
+					return true;
+				}
+				return false;
+			}
+
+			bool send([[maybe_unused]] Publication publication) override
+			{
+				if constexpr (std::is_invocable_v<R, Publication>)
+				{
+					return safe_invoke_protection_result(callback_, protector_, std::move(publication));
+				}
+				else if constexpr (std::is_invocable_v<R>)
+				{
+					return safe_invoke_protection_result(callback_, protector_);
+				}
+				// Could not find a compatible signature
+				assert(false);
+				return false;
+			}
+
+			bool send(
 				[[maybe_unused]] Publication publication,
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
@@ -46,15 +71,16 @@ public:
 				if constexpr (
 					std::is_invocable_v<R, Publication, const std::atomic<std::uint32_t> &, const std::uint32_t>)
 				{
-					safe_invoke_void(callback_, protector_, std::move(publication), global_run_id, your_run_id);
-				}
-				else if constexpr (std::is_invocable_v<R, Publication>)
-				{
-					safe_invoke_void(callback_, protector_, std::move(publication));
+					return safe_invoke_protection_result(
+						callback_,
+						protector_,
+						std::move(publication),
+						global_run_id,
+						your_run_id);
 				}
 				else
 				{
-					safe_invoke_void(callback_, protector_);
+					return send(std::move(publication));
 				}
 			}
 
@@ -100,12 +126,22 @@ public:
 		return *this;
 	}
 
-	void send(
+	bool has_run_id_control() const noexcept
+	{
+		return subscription_callback_holder_->has_run_id_control();
+	}
+
+	bool send(Publication publication) const
+	{
+		return subscription_callback_holder_->send(std::move(publication));
+	}
+
+	bool send(
 		Publication publication,
 		const std::atomic<std::uint32_t> & global_run_id,
 		const std::uint32_t your_run_id) const
 	{
-		(*subscription_callback_holder_)(std::move(publication), global_run_id, your_run_id);
+		return subscription_callback_holder_->send(std::move(publication), global_run_id, your_run_id);
 	}
 
 	bool alive()
@@ -126,7 +162,9 @@ public:
 	struct SubscriptionCallbackHolder
 	{
 		virtual ~SubscriptionCallbackHolder() = default;
-		virtual void operator()(
+		virtual bool has_run_id_control() const noexcept = 0;
+		virtual bool send(Publication publication) = 0;
+		virtual bool send(
 			Publication publication,
 			const std::atomic<std::uint32_t> & global_run_id,
 			const std::uint32_t your_run_id) = 0;
@@ -173,6 +211,11 @@ public:
 							 : create_send_may_blocked(std::move(subscription_callback), std::move(highway_mailbox));
 	}
 
+	static Subscription create(SubscriptionCallbackPtr<Publication> subscription_callback)
+	{
+		return create_direct_send(std::move(subscription_callback));
+	}
+
 	template <typename R, typename P>
 	static Subscription create(
 		R && callback,
@@ -189,6 +232,22 @@ public:
 			line);
 
 		return create(std::move(subscription_callback), std::move(highway_mailbox), send_may_fail);
+	} // create
+
+	template <typename R, typename P>
+	static Subscription create(
+		R && callback,
+		P protector,
+		std::string filename = __FILE__,
+		const unsigned int line = __LINE__)
+	{
+		auto subscription_callback = SubscriptionCallback<Publication>::template create<R, P>(
+			std::move(callback),
+			std::move(protector),
+			std::move(filename),
+			line);
+
+		return create(std::move(subscription_callback));
 	} // create
 
 	static Subscription create_send_may_fail(
@@ -278,6 +337,28 @@ public:
 		return Subscription{
 			new SubscriptionProtectedHolderImpl{std::move(subscription_callback), std::move(highway_mail_box)}};
 	}
+
+	static Subscription create_direct_send(SubscriptionCallbackPtr<Publication> subscription_callback)
+	{
+		assert(subscription_callback);
+
+		struct SubscriptionProtectedHolderImpl : public SubscriptionHolder
+		{
+			SubscriptionProtectedHolderImpl(SubscriptionCallbackPtr<Publication> subscription_callback)
+				: subscription_callback_{std::move(subscription_callback)}
+			{
+			}
+
+			bool operator()(Publication publication) override
+			{
+				return subscription_callback_->send(std::move(publication));
+			}
+
+			SubscriptionCallbackPtr<Publication> subscription_callback_;
+		};
+
+		return Subscription{new SubscriptionProtectedHolderImpl{std::move(subscription_callback)}};
+	} // create_direct_send
 
 	~Subscription()
 	{
@@ -414,6 +495,47 @@ void subscribe(
 		send_may_fail,
 		std::move(filename),
 		line);
+}
+
+/**
+ * Subscribing to a channel. Direct send in publisher thread.
+ *
+ * @param subscribe_channel - channel to subscribe to
+ * @param callback - publish handler callback
+ * @param protector - subscription protection (a way to terminate a subscription)
+ * @param filename - file where the code is located
+ * @param line - line in the file that contains the code
+ */
+template <typename Publication, typename R, typename P>
+void subscribe(
+	ISubscribeHere<Publication> & subscribe_channel,
+	R && callback,
+	P protector,
+	std::string filename = __FILE__,
+	const unsigned int line = __LINE__)
+{
+	subscribe_channel.subscribe(
+		hi::Subscription<Publication>::create(std::move(callback), std::move(protector), std::move(filename), line));
+}
+
+/**
+ * Subscribing to a channel. Direct send in publisher thread.
+ *
+ * @param subscribe_channel - channel to subscribe to
+ * @param callback - publish handler callback
+ * @param protector - subscription protection (a way to terminate a subscription)
+ * @param filename - file where the code is located
+ * @param line - line in the file that contains the code
+ */
+template <typename Publication, typename R, typename P>
+void subscribe(
+	ISubscribeHerePtr<Publication> subscribe_channel,
+	R && callback,
+	P protector,
+	std::string filename = __FILE__,
+	const unsigned int line = __LINE__)
+{
+	subscribe(*subscribe_channel, std::move(callback), std::move(protector), std::move(filename), line);
 }
 
 template <typename Publication, typename Protector>

@@ -18,11 +18,17 @@ target_include_directories(${LIB_NAME}
 #)
 
 option(BUILD_EXAMPLES "Build examples " ON)
+option(BUILD_PERFORMANCE_TESTS  "Build performance tests " ON)
 option(BUILD_TESTING "Build unit tests" ON)
 
 if(BUILD_EXAMPLES)
     message(STATUS "building thread_highways examples..")
     add_subdirectory(examples)
+endif()
+
+if(BUILD_PERFORMANCE_TESTS)
+    message(STATUS "building performance tests..")
+    add_subdirectory(performance_tests)
 endif()
 
 if(BUILD_TESTING)

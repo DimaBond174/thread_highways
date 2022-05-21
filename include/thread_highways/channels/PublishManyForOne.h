@@ -35,6 +35,13 @@ public:
 	{
 	}
 
+	template <typename R, typename P>
+	PublishManyForOne(R && callback, P protector, std::string filename = __FILE__, const unsigned int line = __LINE__)
+		: subscription_{
+			Subscription<Publication>::create(std::move(callback), std::move(protector), std::move(filename), line)}
+	{
+	}
+
 public: // IPublisher
 	void publish(Publication publication) const override
 	{

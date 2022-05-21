@@ -35,6 +35,28 @@ void safe_invoke_void(Fun && fun, Protector & protector, Args &&... args)
 }
 
 template <typename Fun, typename Protector, typename... Args>
+bool safe_invoke_protection_result(Fun && fun, Protector & protector, Args &&... args)
+{
+	if constexpr (std::is_invocable_v<Fun, Args...>)
+	{
+		if (auto lock = protector.lock())
+		{
+			std::invoke(std::forward<Fun>(fun), std::forward<Args>(args)...);
+			return true;
+		}
+	}
+	else
+	{
+		if (auto lock = protector.lock())
+		{
+			std::invoke(std::forward<Fun>(fun), *lock, std::forward<Args>(args)...);
+			return true;
+		}
+	}
+	return false;
+}
+
+template <typename Fun, typename Protector, typename... Args>
 constexpr std::shared_ptr<std::invoke_result_t<Fun, Args...>> safe_invoke_for_result(
 	Fun && fun,
 	Protector & protector,

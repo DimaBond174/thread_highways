@@ -33,7 +33,7 @@ TYPED_TEST_SUITE(TestPublushManyForMany, publisher_types);
 /*
  Тест доставки публикации подписчикам.
 */
-TYPED_TEST(TestPublushManyForMany, DirectSend)
+TYPED_TEST(TestPublushManyForMany, SendOnHighway)
 {
 	std::atomic<std::uint32_t> result1{0};
 	std::atomic<std::uint32_t> result2{0};
@@ -89,6 +89,56 @@ TYPED_TEST(TestPublushManyForMany, DirectSend)
 	EXPECT_EQ(expected_result, result2);
 
 	highway->destroy();
+}
+
+TYPED_TEST(TestPublushManyForMany, DirectSend)
+{
+	std::atomic<std::uint32_t> result1{0};
+	std::atomic<std::uint32_t> result2{0};
+	std::vector<std::uint32_t> data1{1, 2, 3, 4, 5, 6, 7};
+	std::vector<std::uint32_t> data2{8, 9, 10, 11, 12, 13, 14};
+	const std::uint32_t expected_result = std::accumulate(data1.begin(), data1.end(), std::uint32_t{0})
+		+ std::accumulate(data2.begin(), data2.end(), std::uint32_t{0});
+
+	auto publisher = hi::make_self_shared<TypeParam>();
+
+	hi::subscribe(
+		*publisher->subscribe_channel(),
+		[&](typename TypeParam::PublicationType message)
+		{
+			result1 += message;
+		},
+		std::weak_ptr(publisher));
+
+	hi::subscribe(
+		*publisher->subscribe_channel(),
+		[&](typename TypeParam::PublicationType message)
+		{
+			result2 += message;
+		},
+		std::weak_ptr(publisher));
+
+	std::thread thread1{[&]
+						{
+							for (auto && it : data1)
+							{
+								publisher->publish(it);
+							}
+						}};
+
+	std::thread thread2{[&]
+						{
+							for (auto && it : data2)
+							{
+								publisher->publish(it);
+							}
+						}};
+
+	thread1.join();
+	thread2.join();
+
+	EXPECT_EQ(expected_result, result1);
+	EXPECT_EQ(expected_result, result2);
 }
 
 } // namespace

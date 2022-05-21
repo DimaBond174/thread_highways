@@ -105,6 +105,34 @@ TYPED_TEST(TestBufferedRetransmitter, BufferedSend)
 	highway->destroy();
 }
 
+TYPED_TEST(TestBufferedRetransmitter, BufferedSend_DirectSend)
+{
+	std::string result;
+	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
+	const std::string expected_result{"1233345555567"};
+
+	auto publisher = hi::make_self_shared<TypeParam>();
+	auto buffered_retransmitter =
+		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, false, false>>(
+			publisher->subscribe_channel(),
+			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
+
+	hi::subscribe(
+		*buffered_retransmitter->subscribe_channel(),
+		[&](typename TypeParam::PublicationType message)
+		{
+			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+		},
+		std::weak_ptr(publisher));
+
+	for (auto && it : data)
+	{
+		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
+	}
+
+	EXPECT_EQ(expected_result, result);
+}
+
 /*
  Тест доставки публикации подписчикам:
  - c отправкой буфферизированного значения новым подписчикам (resend_to_just_connected = true)
@@ -147,6 +175,34 @@ TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnected)
 	}
 
 	highway->destroy();
+}
+
+TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnected_DirectSend)
+{
+	std::string result;
+	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
+	const std::string expected_result{"7771233345555567"};
+
+	auto publisher = hi::make_self_shared<TypeParam>();
+	auto buffered_retransmitter =
+		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, true, false>>(
+			publisher->subscribe_channel(),
+			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
+
+	hi::subscribe(
+		*buffered_retransmitter->subscribe_channel(),
+		[&](typename TypeParam::PublicationType message)
+		{
+			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+		},
+		std::weak_ptr(publisher));
+
+	for (auto && it : data)
+	{
+		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
+	}
+
+	EXPECT_EQ(expected_result, result);
 }
 
 /*
@@ -193,6 +249,34 @@ TYPED_TEST(TestBufferedRetransmitter, BufferedSendNewOnly)
 	highway->destroy();
 }
 
+TYPED_TEST(TestBufferedRetransmitter, BufferedSendNewOnly_DirectSend)
+{
+	std::string result;
+	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
+	const std::string expected_result{"1234567"};
+
+	auto publisher = hi::make_self_shared<TypeParam>();
+	auto buffered_retransmitter =
+		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, false, true>>(
+			publisher->subscribe_channel(),
+			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
+
+	hi::subscribe(
+		*buffered_retransmitter->subscribe_channel(),
+		[&](typename TypeParam::PublicationType message)
+		{
+			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+		},
+		std::weak_ptr(publisher));
+
+	for (auto && it : data)
+	{
+		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
+	}
+
+	EXPECT_EQ(expected_result, result);
+}
+
 /*
  Тест доставки публикации подписчикам:
  - c отправкой буфферизированного значения новым подписчикам (resend_to_just_connected = true)
@@ -235,6 +319,34 @@ TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnectedNewOnly)
 	}
 
 	highway->destroy();
+}
+
+TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnectedNewOnly_DirectSend)
+{
+	std::string result;
+	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
+	const std::string expected_result{"7771234567"};
+
+	auto publisher = hi::make_self_shared<TypeParam>();
+	auto buffered_retransmitter =
+		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, true, true>>(
+			publisher->subscribe_channel(),
+			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
+
+	hi::subscribe(
+		*buffered_retransmitter->subscribe_channel(),
+		[&](typename TypeParam::PublicationType message)
+		{
+			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+		},
+		std::weak_ptr(publisher));
+
+	for (auto && it : data)
+	{
+		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
+	}
+
+	EXPECT_EQ(expected_result, result);
 }
 
 } // namespace

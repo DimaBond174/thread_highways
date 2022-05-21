@@ -153,6 +153,13 @@ public:
 			line));
 	} // subscribe
 
+	template <typename R, typename P>
+	void subscribe(R && callback, P protector, std::string filename = __FILE__, const unsigned int line = __LINE__)
+	{
+		subscribe_channel()->subscribe(
+			Subscription<Publication>::create(std::move(callback), std::move(protector), std::move(filename), line));
+	} // subscribe
+
 	void set_value(Publication value)
 	{
 		holder_.set_value(std::move(value));

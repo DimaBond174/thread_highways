@@ -79,6 +79,13 @@ public:
 			line));
 	} // subscribe
 
+	template <typename R, typename P>
+	void subscribe(R && callback, P protector, std::string filename = __FILE__, const unsigned int line = __LINE__)
+	{
+		subscribe(
+			Subscription<Publication>::create(std::move(callback), std::move(protector), std::move(filename), line));
+	} // subscribe
+
 public: // IPublisher
 	void publish(Publication publication) const override
 	{

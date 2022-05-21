@@ -132,6 +132,68 @@ TYPED_TEST(TestConnectionsNotifier, OnFirstOnLast)
 	highway->destroy();
 }
 
+TYPED_TEST(TestConnectionsNotifier, OnFirstOnLast_DirectSend)
+{
+	bool was_first_connected{false};
+	bool was_last_disconnected{false};
+
+	auto publisher = hi::make_self_shared<TypeParam>(
+		[&]
+		{
+			was_first_connected = true;
+		},
+		[&]
+		{
+			was_last_disconnected = true;
+		});
+
+	using PublicationType = typename TypeParam::PublicationType;
+	struct SelfProtectedChecker
+	{
+		SelfProtectedChecker(std::weak_ptr<SelfProtectedChecker> self_weak, ISubscribeHere<PublicationType> & channel)
+			: future_{promise_.get_future()}
+		{
+			hi::subscribe(
+				channel,
+				[this](PublicationType result)
+				{
+					EXPECT_EQ(0, exec_counter_);
+					++exec_counter_;
+					promise_.set_value(result);
+				},
+				self_weak);
+		}
+
+		std::promise<PublicationType> promise_;
+		std::future<PublicationType> future_;
+		std::atomic<std::uint32_t> exec_counter_{0};
+	};
+
+	const PublicationType expected{to_target_type<std::uint32_t, PublicationType>(777)};
+
+	for (int i = 0; i < 10; ++i)
+	{
+		{
+			auto subscriber = hi::make_self_shared<SelfProtectedChecker>(*publisher->subscribe_channel());
+			EXPECT_TRUE(was_first_connected);
+			EXPECT_FALSE(was_last_disconnected);
+
+			was_first_connected = false;
+			publisher->publish(expected);
+			EXPECT_EQ(expected, subscriber->future_.get());
+			EXPECT_FALSE(was_first_connected);
+			EXPECT_FALSE(was_last_disconnected);
+		}
+
+		// Detection of disconnected subscribers occurs at the time of distribution of the publication
+		publisher->publish(expected);
+
+		EXPECT_FALSE(was_first_connected);
+		EXPECT_TRUE(was_last_disconnected);
+		was_last_disconnected = false;
+	}
+}
+
 TYPED_TEST(TestConnectionsNotifier, ShouldCallCallbackOnlyOnceForSeveralConnections)
 {
 	auto highway = hi::make_self_shared<hi::ConcurrentHighWay<>>();
@@ -172,6 +234,40 @@ TYPED_TEST(TestConnectionsNotifier, ShouldCallCallbackOnlyOnceForSeveralConnecti
 	EXPECT_EQ(1, last_disconnected_counter);
 
 	highway->destroy();
+}
+
+TYPED_TEST(TestConnectionsNotifier, ShouldCallCallbackOnlyOnceForSeveralConnections_DirectSend)
+{
+	int first_connected_counter{0};
+	int last_disconnected_counter{0};
+
+	auto publisher = hi::make_self_shared<TypeParam>(
+		[&]
+		{
+			++first_connected_counter;
+		},
+		[&]
+		{
+			++last_disconnected_counter;
+		});
+
+	using PublicationType = typename TypeParam::PublicationType;
+
+	auto fake_protector = std::make_shared<bool>();
+
+	publisher->subscribe([](PublicationType) {}, std::weak_ptr(fake_protector));
+	publisher->subscribe([](PublicationType) {}, std::weak_ptr(fake_protector));
+	publisher->subscribe([](PublicationType) {}, std::weak_ptr(fake_protector));
+	EXPECT_EQ(1, first_connected_counter);
+	EXPECT_EQ(0, last_disconnected_counter);
+
+	fake_protector.reset();
+
+	// Detection of disconnected subscribers occurs at the time of distribution of the publication
+	publisher->publish(PublicationType{});
+
+	EXPECT_EQ(1, first_connected_counter);
+	EXPECT_EQ(1, last_disconnected_counter);
 }
 
 } // namespace

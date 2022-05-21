@@ -34,7 +34,7 @@ TYPED_TEST_SUITE(TestPublushManyForOne, publisher_types);
 /*
  Тест доставки публикации подписчикам.
 */
-TYPED_TEST(TestPublushManyForOne, DirectSend)
+TYPED_TEST(TestPublushManyForOne, SendOnHighway)
 {
 	std::atomic<std::uint32_t> result{0};
 	std::vector<std::uint32_t> data1{1, 2, 3, 4, 5, 6, 7};
@@ -62,7 +62,6 @@ TYPED_TEST(TestPublushManyForOne, DirectSend)
 		{
 			auto publisher = hi::make_self_shared<TypeParam>();
 			publisher->subscribe(std::move(callback), highway->protector_for_tests_only(), highway->mailbox());
-			// hi::subscribe(publisher->subscribe_channel(), highway, std::move(callback));
 			return publisher;
 		}
 	}();
@@ -91,6 +90,56 @@ TYPED_TEST(TestPublushManyForOne, DirectSend)
 	EXPECT_EQ(expected_result, result);
 
 	highway->destroy();
+}
+
+TYPED_TEST(TestPublushManyForOne, DirectSend)
+{
+	std::atomic<std::uint32_t> result{0};
+	std::vector<std::uint32_t> data1{1, 2, 3, 4, 5, 6, 7};
+	std::vector<std::uint32_t> data2{8, 9, 10, 11, 12, 13, 14};
+	const std::uint32_t expected_result = std::accumulate(data1.begin(), data1.end(), std::uint32_t{0})
+		+ std::accumulate(data2.begin(), data2.end(), std::uint32_t{0});
+
+	auto callback = [&](typename TypeParam::PublicationType message)
+	{
+		result += message;
+	};
+
+	auto protector = std::make_shared<bool>();
+	auto publisher = [&]()
+	{
+		if constexpr (std::is_same_v<PublishManyForOne<std::uint32_t>, TypeParam>)
+		{
+			return std::make_shared<TypeParam>(std::move(callback), std::weak_ptr(protector));
+		}
+		else
+		{
+			auto publisher = hi::make_self_shared<TypeParam>();
+			publisher->subscribe(std::move(callback), std::weak_ptr(protector));
+			return publisher;
+		}
+	}();
+
+	std::thread thread1{[&]
+						{
+							for (auto && it : data1)
+							{
+								publisher->publish(it);
+							}
+						}};
+
+	std::thread thread2{[&]
+						{
+							for (auto && it : data2)
+							{
+								publisher->publish(it);
+							}
+						}};
+
+	thread1.join();
+	thread2.join();
+
+	EXPECT_EQ(expected_result, result);
 }
 
 } // namespace

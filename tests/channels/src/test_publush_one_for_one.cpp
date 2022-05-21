@@ -66,7 +66,7 @@ To to_target_type(From val)
 /*
  Тест доставки публикации подписчикам.
 */
-TYPED_TEST(TestPublushOneForOne, DirectSend)
+TYPED_TEST(TestPublushOneForOne, SendOnHighway)
 {
 	std::string result;
 	std::mutex result_protector;
@@ -104,13 +104,6 @@ TYPED_TEST(TestPublushOneForOne, DirectSend)
 		{
 			auto publisher = hi::make_self_shared<TypeParam>();
 			publisher->subscribe(std::move(callback), highway->protector_for_tests_only(), highway->mailbox());
-			//			publisher->subscribe(Subscription<typename TypeParam::PublicationType>::create(
-			//				std::move(callback),
-			//				 highway->protector_for_tests_only(),
-			//				 highway->mailbox()
-			//				 ));
-			// hi::subscribe(*publisher->subscribe_channel(), std::move(callback), highway->protector_for_tests_only(),
-			// highway->mailbox());
 			return publisher;
 		}
 	}();
@@ -127,6 +120,50 @@ TYPED_TEST(TestPublushOneForOne, DirectSend)
 	}
 
 	highway->destroy();
+}
+
+TYPED_TEST(TestPublushOneForOne, DirectSend)
+{
+	std::string result;
+	std::vector<std::uint32_t> data{1, 2, 3, 4, 5, 6, 7};
+	const std::string expected_result = [&, sum_string = std::string{}]() mutable
+	{
+		for (auto && it : data)
+		{
+			sum_string.append(std::to_string(it));
+		}
+		return sum_string;
+	}();
+
+	auto callback = [&](typename TypeParam::PublicationType message)
+	{
+		result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+	};
+
+	auto protector = std::make_shared<bool>();
+	auto publisher = [&]()
+	{
+		if constexpr (
+			std::is_same_v<
+				PublishManyForOne<std::uint32_t>,
+				TypeParam> || std::is_same_v<PublishManyForOne<std::string>, TypeParam>)
+		{
+			return std::make_shared<TypeParam>(std::move(callback), std::weak_ptr(protector));
+		}
+		else
+		{
+			auto publisher = hi::make_self_shared<TypeParam>();
+			publisher->subscribe(std::move(callback), std::weak_ptr(protector));
+			return publisher;
+		}
+	}();
+
+	for (auto && it : data)
+	{
+		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
+	}
+
+	EXPECT_EQ(expected_result, result);
 }
 
 } // namespace
