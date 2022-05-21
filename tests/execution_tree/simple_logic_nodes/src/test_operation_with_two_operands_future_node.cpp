@@ -26,7 +26,7 @@ TEST(TestOperationWithTwoOperandsFutureNode, StringConcatenation)
 	auto future_node = hi::OperationWithTwoOperandsFutureNode<std::string, std::string, std::string>::create(
 		[](std::string operand1, std::string operand2)
 		{
-			EXPECT_EQ("Mother washed the frame", operand1.append(operand2));
+			EXPECT_EQ("Mother washed the frame", operand1.append(std::move(operand2)));
 		},
 		highway.object_->protector_for_tests_only(),
 		highway.object_,

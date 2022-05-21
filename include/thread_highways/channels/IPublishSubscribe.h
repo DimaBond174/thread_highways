@@ -479,7 +479,7 @@ void subscribe(
  */
 template <typename Publication, typename R, typename P>
 void subscribe(
-	ISubscribeHerePtr<Publication> subscribe_channel,
+	const ISubscribeHerePtr<Publication> & subscribe_channel,
 	R && callback,
 	P protector,
 	IHighWayMailBoxPtr highway_mailbox,
@@ -529,7 +529,7 @@ void subscribe(
  */
 template <typename Publication, typename R, typename P>
 void subscribe(
-	ISubscribeHerePtr<Publication> subscribe_channel,
+	const ISubscribeHerePtr<Publication> & subscribe_channel,
 	R && callback,
 	P protector,
 	std::string filename = __FILE__,

@@ -24,6 +24,10 @@ struct ScienceOfNotMovable
 		std::lock_guard lg{mutex_}; // just using for using
 		scope_.print(std::string{"~Science data: "}.append(*science_data_));
 	}
+	ScienceOfNotMovable(const ScienceOfNotMovable &) = delete;
+	ScienceOfNotMovable & operator=(const ScienceOfNotMovable &) = delete;
+	ScienceOfNotMovable(ScienceOfNotMovable &&) = delete;
+	ScienceOfNotMovable & operator=(ScienceOfNotMovable &&) = delete;
 
 	hi::CoutScope & scope_;
 	std::unique_ptr<std::string> science_data_;

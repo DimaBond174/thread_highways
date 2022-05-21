@@ -10,7 +10,7 @@ int main(int /* argc */, char ** /* argv */)
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<int>>();
 	auto channel = publisher->subscribe_channel();
 
-	const auto subscribe = [&](hi::IHighWayPtr highway)
+	const auto subscribe = [&](const hi::IHighWayPtr & highway)
 	{
 		hi::subscribe(
 			channel,

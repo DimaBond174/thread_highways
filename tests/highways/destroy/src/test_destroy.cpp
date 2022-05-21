@@ -51,6 +51,11 @@ struct OnDestroyWatcher
 		auto tst_val = State::Nothing;
 		watcher_.compare_exchange_strong(tst_val, State::Destroyed);
 	}
+	OnDestroyWatcher(const OnDestroyWatcher &) = delete;
+	OnDestroyWatcher & operator=(const OnDestroyWatcher &) = delete;
+	OnDestroyWatcher(OnDestroyWatcher &&) = delete;
+	OnDestroyWatcher & operator=(OnDestroyWatcher &&) = delete;
+
 	std::atomic<State> & watcher_;
 };
 

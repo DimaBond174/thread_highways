@@ -38,6 +38,10 @@ int main(int /* argc */, char ** /* argv */)
 		{
 			scope_->print(std::to_string(id_).append(") subscriber destroyed.\n\n"));
 		}
+		SelfProtectedSubscriber(const SelfProtectedSubscriber &) = delete;
+		SelfProtectedSubscriber & operator=(const SelfProtectedSubscriber &) = delete;
+		SelfProtectedSubscriber(SelfProtectedSubscriber &&) = delete;
+		SelfProtectedSubscriber & operator=(SelfProtectedSubscriber &&) = delete;
 
 		const std::uint32_t id_;
 		const std::shared_ptr<hi::CoutScope> scope_;

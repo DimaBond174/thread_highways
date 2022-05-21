@@ -39,7 +39,7 @@ TEST(TestIfElseFutureNodeLogic, CheckNumberIsOddOrEven)
 	{
 		SelfProtectedChecker(
 			std::weak_ptr<SelfProtectedChecker> self_weak,
-			std::shared_ptr<IfElseFutureNode<std::uint32_t, bool, bool>> if_then_node,
+			const std::shared_ptr<IfElseFutureNode<std::uint32_t, bool, bool>> & if_then_node,
 			IHighWayMailBoxPtr highway_mailbox)
 			: odd_future_{odd_promise_.get_future()}
 			, even_future_{even_promise_.get_future()}
@@ -63,8 +63,8 @@ TEST(TestIfElseFutureNodeLogic, CheckNumberIsOddOrEven)
 					++exec_counter_;
 					even_promise_.set_value(result);
 				},
-				self_weak,
-				highway_mailbox);
+				std::move(self_weak),
+				std::move(highway_mailbox));
 		}
 
 		std::promise<bool> odd_promise_;
@@ -118,8 +118,8 @@ TEST(TestIfElseFutureNodeLogic, CheckSharedNumberIsOddOrEven)
 	{
 		SelfProtectedChecker(
 			std::weak_ptr<SelfProtectedChecker> self_weak,
-			std::shared_ptr<
-				IfElseFutureNode<std::shared_ptr<std::uint32_t>, std::shared_ptr<bool>, std::shared_ptr<std::string>>>
+			const std::shared_ptr<
+				IfElseFutureNode<std::shared_ptr<std::uint32_t>, std::shared_ptr<bool>, std::shared_ptr<std::string>>> &
 				if_then_node,
 			IHighWayMailBoxPtr highway_mailbox)
 			: odd_future_{odd_promise_.get_future()}
@@ -144,8 +144,8 @@ TEST(TestIfElseFutureNodeLogic, CheckSharedNumberIsOddOrEven)
 					++exec_counter_;
 					even_promise_.set_value(*result == "YES");
 				},
-				self_weak,
-				highway_mailbox);
+				std::move(self_weak),
+				std::move(highway_mailbox));
 		}
 
 		std::promise<bool> odd_promise_;

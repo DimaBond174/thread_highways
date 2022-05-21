@@ -58,7 +58,7 @@ TEST(TestAggregatingFutureNode, AggregateSum)
 	{
 		SelfProtectedChecker(
 			std::weak_ptr<SelfProtectedChecker> self_weak,
-			std::shared_ptr<AggregatingFutureNode<double, AggregatingBundle, double>> node,
+			const std::shared_ptr<AggregatingFutureNode<double, AggregatingBundle, double>> & node,
 			IHighWayMailBoxPtr highway_mailbox)
 			: future_{promise_.get_future()}
 		{
@@ -70,8 +70,8 @@ TEST(TestAggregatingFutureNode, AggregateSum)
 					++exec_counter_;
 					promise_.set_value(result);
 				},
-				self_weak,
-				highway_mailbox);
+				std::move(self_weak),
+				std::move(highway_mailbox));
 		}
 
 		std::promise<double> promise_;

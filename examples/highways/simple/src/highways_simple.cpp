@@ -88,9 +88,9 @@ void multithreading()
 	hi::RAIIdestroy highway{hi::make_self_shared<hi::ConcurrentHighWay<>>(
 		"HighWay",
 		hi::create_default_logger(
-			[&](std::string msg)
+			[&](const std::string & msg)
 			{
-				scope.print(std::move(msg));
+				scope.print(msg);
 			}),
 		10ms, // max_task_execution_time
 		1ms // workers_change_period

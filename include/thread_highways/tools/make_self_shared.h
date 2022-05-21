@@ -25,7 +25,7 @@ template <typename T, typename... Args>
 			auto ptr = std::launder(reinterpret_cast<T *>(buffer_));
 			auto alias = std::shared_ptr<T>(this->shared_from_this(), ptr);
 			::new (ptr) T(alias, std::forward<Args>(args)...);
-			ptr_ = ptr;
+			ptr_ = std::launder(reinterpret_cast<T *>(buffer_));
 			return alias;
 		}
 

@@ -12,9 +12,9 @@ void monitor_shortage_of_holders()
 {
 	hi::CoutScope scope("monitor_shortage_of_holders()");
 	auto logger = hi::create_default_logger(
-		[&](std::string msg)
+		[&](const std::string & msg)
 		{
-			scope.print(std::move(msg));
+			scope.print(msg);
 		});
 
 	auto highway =
@@ -44,9 +44,9 @@ void monitor_exception()
 {
 	hi::CoutScope scope("monitor_exception()");
 	auto logger = hi::create_default_logger(
-		[&](std::string msg)
+		[&](const std::string & msg)
 		{
-			scope.print(std::move(msg));
+			scope.print(msg);
 		});
 	auto highway = hi::make_self_shared<hi::SerialHighWay<>>("SerialHighWay:monitor_exception", std::move(logger));
 
@@ -83,9 +83,9 @@ void monitor_hungs()
 {
 	hi::CoutScope scope("monitor_hungs()");
 	auto logger = hi::create_default_logger(
-		[&](std::string msg)
+		[&](const std::string & msg)
 		{
-			scope.print(std::move(msg));
+			scope.print(msg);
 		});
 	auto highway = hi::make_self_shared<hi::SerialHighWay<>>(
 		"SerialHighWay:monitor_hungs",
@@ -131,9 +131,9 @@ void monitor_SIGSEGV()
 {
 	hi::CoutScope scope("monitor_SIGSEGV()");
 	auto logger = hi::create_default_logger(
-		[&](std::string msg)
+		[&](const std::string & msg)
 		{
-			scope.print(std::move(msg));
+			scope.print(msg);
 		});
 	auto highway =
 		hi::make_self_shared<hi::SerialHighWayDebug<>>("SerialHighWayDebug:monitor_SIGSEGV", std::move(logger));
@@ -158,9 +158,9 @@ void monitor_and_repair_hungs()
 {
 	hi::CoutScope scope("monitor_and_repair_hungs()");
 	auto logger = hi::create_default_logger(
-		[&](std::string msg)
+		[&](const std::string & msg)
 		{
-			scope.print(std::move(msg));
+			scope.print(msg);
 		});
 
 	/*
@@ -206,9 +206,9 @@ void monitor_and_repair_hungs_concurrent_highway()
 {
 	hi::CoutScope scope("monitor_and_repair_hungs_concurrent_highway()");
 	auto logger = hi::create_default_logger(
-		[&](std::string msg)
+		[&](const std::string & msg)
 		{
-			scope.print(std::move(msg));
+			scope.print(msg);
 		});
 
 	auto highway = hi::make_self_shared<hi::ConcurrentHighWay<>>(

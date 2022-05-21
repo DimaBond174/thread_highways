@@ -11,7 +11,7 @@ std::shared_ptr<hi::SerialHighWayWithScheduler<>> render_highway()
 }
 
 void create_subscriber(
-	hi::ISubscribeHerePtr<std::string> channel,
+	const hi::ISubscribeHerePtr<std::string> & channel,
 	std::shared_ptr<hi::CoutScope> scope,
 	std::int32_t life_time)
 {
@@ -111,6 +111,10 @@ void connections_notifier_start_stop_microservice()
 			scope_->print("Service: destroyed.");
 			scope_.reset();
 		}
+		Service(const Service &) = delete;
+		Service & operator=(const Service &) = delete;
+		Service(Service &&) = delete;
+		Service & operator=(Service &&) = delete;
 
 		hi::ISubscribeHerePtr<std::string> subscribe_channel()
 		{

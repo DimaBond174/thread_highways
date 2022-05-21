@@ -8,7 +8,7 @@ using namespace std::chrono_literals;
 
 void common_test(
 	std::shared_ptr<hi::PublishOneForMany<std::uint32_t>> & publisher,
-	hi::ISubscribeHerePtr<std::uint32_t> subscribe_channel)
+	const hi::ISubscribeHerePtr<std::uint32_t> & subscribe_channel)
 {
 	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();
@@ -128,7 +128,7 @@ void test_atomic()
 
 void common_test(
 	std::shared_ptr<hi::PublishOneForMany<std::string>> & publisher,
-	hi::ISubscribeHerePtr<std::string> subscribe_channel)
+	const hi::ISubscribeHerePtr<std::string> & subscribe_channel)
 {
 	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
 	auto highway_mailbox = highway->mailbox();

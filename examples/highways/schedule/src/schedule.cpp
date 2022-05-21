@@ -16,7 +16,7 @@ void schedule_simple_runnable()
 	auto logger = hi::create_default_logger(
 		[&](const std::string & msg)
 		{
-			scope.print(std::move(msg));
+			scope.print(msg);
 		});
 	auto highway = hi::make_self_shared<hi::SingleThreadHighWayWithScheduler<>>(
 		"SingleThreadHighWay:schedule_simple_runnable",
