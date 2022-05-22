@@ -20,6 +20,10 @@
 namespace hi
 {
 
+/**
+ * @brief The Logger struct
+ * Common Interface of any injected logging
+ */
 struct Logger
 {
 	virtual ~Logger() = default;
@@ -32,6 +36,15 @@ using InternalLogger = std::function<void(const std::string &, const std::string
 namespace
 {
 
+/**
+ * An example of creating a simple logger that adds information about
+ *  the current time and current thread to the record
+ * @param sink - string output object
+ * @return unique pointer to logger
+ *
+ * Usage example:
+ * https://github.com/DimaBond174/thread_highways/blob/main/examples/highways/monitoring/src/monitoring.cpp#L14
+ */
 template <typename Sink>
 LoggerPtr create_default_logger(Sink && sink)
 {
@@ -60,6 +73,13 @@ LoggerPtr create_default_logger(Sink && sink)
 	return std::make_unique<DefaultLogger>(std::move(sink));
 } // create_default_logger
 
+/**
+ * An example of creating a buffered logger that adds information about
+ *  the current time and current thread to the record
+ * @param sink - string output object
+ * @param buffer_size - the minimum size that a text must reach before it is sent
+ * @return unique pointer to logger
+ */
 template <typename Sink>
 LoggerPtr create_buffered_logger(Sink && sink, const std::uint32_t buffer_size = 0)
 {
@@ -113,6 +133,11 @@ LoggerPtr create_buffered_logger(Sink && sink, const std::uint32_t buffer_size =
 	return std::make_unique<BufferedLogger>(std::move(sink), buffer_size);
 } // create_buffered_logger
 
+/**
+ * @brief The SharedLogger class
+ * Cool crutch how to make a unique shared pointer from unique pointer.
+ * It is better to use with BufferedLogger together as it already has a mutex inside
+ */
 class SharedLogger
 {
 public:

@@ -10,6 +10,11 @@
 namespace hi
 {
 
+/**
+ * @brief The CoutScope struct
+ * A tool for displaying test information on the screen in the correct order.
+ *  As bonus measures the time that the scope was running.
+ */
 struct CoutScope
 {
 	CoutScope(std::string example_name)
@@ -19,6 +24,10 @@ struct CoutScope
 		std::cout << "\n---------------------------\n=>Started: " << example_name_
 				  << ", thread id: " << std::this_thread::get_id() << "\n\n";
 	}
+	CoutScope(const CoutScope &) = delete;
+	CoutScope & operator=(const CoutScope &) = delete;
+	CoutScope(CoutScope &&) = delete;
+	CoutScope & operator=(CoutScope &&) = delete;
 
 	~CoutScope()
 	{
@@ -30,6 +39,11 @@ struct CoutScope
 				  << "\n---------------------------\n";
 	}
 
+	/**
+	 * @brief print
+	 * Printing a text indicating the thread number where it came from
+	 * @param str - text
+	 */
 	void print(const std::string & str)
 	{
 		std::lock_guard lg{mutex_};

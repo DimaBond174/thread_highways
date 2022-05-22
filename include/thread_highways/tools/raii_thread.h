@@ -18,6 +18,8 @@ namespace hi
 /**
  * A more convenient container for std::thread,
  * making it less likely that something might change between calls thread_.joinable() and thread_.join()
+ * Usage example:
+ * https://github.com/DimaBond174/thread_highways/blob/main/include/thread_highways/highways/ConcurrentHighWay.h
  */
 class RAIIthread
 {

@@ -21,34 +21,13 @@
 namespace hi
 {
 
-//! Потокобезопасный безмьютоксный почтовый ящик
-//! с котролем общего количество холдеров в работе
-//! для работы когда отправителей много, а получатель один.
-//! За счёт ограничения количества холдеров не может получиться так
-//! что из-за медленной работы потребителя поставщики переполняют память
-//!  - поставщики вынужденно будут ждать когда потребитель освободит холдер.
-//!
-//! Предполагаемая схема использования в цикле рабочего потока:
-//!
-//!	// цикл рабочего потока
-//! 	while (!prefetch_done_.load())
-//!	{
-//!		// цикл обработки поступивших сообщений
-//!		while (auto fun = thread_mail_box_.pop())
-//!		{
-//!			(*fun)();
-//!		}
-//!
-//!		// в этом месте рабочий цикл может сделать
-//!		// дополнительную полезную работу
-//!		// prefetch_tasks_.poll();
-//!
-//!		// проверка появились ли новые сообщения
-//!		if (thread_mail_box_.exists_messages())
-//!		{
-//!			// если новые сообщения появились, то идём их обрабатывать
-//!			continue;
-//!		}
+/**
+ * @brief MailBox
+ * Thread-safe mutexless mailbox with control over the total number of holders.
+ * Holder is a container for your message to be added to the message queue.
+ *
+ * Usage example: https://github.com/DimaBond174/thread_highways/blob/main/include/thread_highways/highways/IHighWay.h
+ */
 template <typename T>
 class MailBox
 {
@@ -58,11 +37,21 @@ public:
 	{
 	}
 
-	void set_capacity(std::uint32_t capacity)
+	/**
+	 * @brief set_capacity
+	 * Setting the maximum number of holders in operation.
+	 * @param capacity - how much holders
+	 * @note the number of holders that have already been created does not decrease
+	 */
+	void set_capacity(const std::uint32_t capacity)
 	{
 		capacity_.store(capacity, std::memory_order_release);
 	}
 
+	/**
+	 * @brief wait_for_new_messages
+	 * Waiting for new messages using a semaphore.
+	 */
 	void wait_for_new_messages()
 	{
 		if (!messages_stack_.access_stack())
@@ -71,6 +60,11 @@ public:
 		}
 	}
 
+	/**
+	 * @brief wait_for_new_messages
+	 * Waiting for new messages with a semaphore, waiting time is limited.
+	 * @param ns - max wait time
+	 */
 	void wait_for_new_messages(std::chrono::nanoseconds ns)
 	{
 		if (!messages_stack_.access_stack())
@@ -79,32 +73,65 @@ public:
 		}
 	}
 
+	/**
+	 * @brief load_new_messages
+	 * Moving the stack of current messages
+	 *  so that the message queue is in the correct order.
+	 * @note typically this method is called from the main thread
+	 * and then notifies the worker threads of the work to be done.
+	 */
 	void load_new_messages()
 	{
 		messages_stack_.move_to(work_queue_);
 	}
 
+	/**
+	 * @brief signal_to_work_queue_semaphore
+	 * Notifying worker threads that work has appeared.
+	 * @param count - the number of workers who need to open the semaphore.
+	 */
 	void signal_to_work_queue_semaphore(std::uint32_t count)
 	{
 		work_queue_semaphore_.signal(count);
 	}
 
+	/**
+	 * @brief worker_wait_for_messages
+	 * Setting a worker thread to wait on a semaphore.
+	 */
 	void worker_wait_for_messages()
 	{
 		work_queue_semaphore_.wait();
 	}
 
+	/**
+	 * @brief pop_message
+	 * Extracting one holder with a message.
+	 * @return holder or nullptr
+	 */
 	[[nodiscard]] Holder<T> * pop_message()
 	{
 		return work_queue_.pop();
 	}
 
+	/**
+	 * @brief free_holder
+	 * Returning a holder to the pool of released holders.
+	 * @param holder
+	 * @note for those who are waiting for the release
+	 * of holders on the semaphore gives a signal
+	 */
 	void free_holder(Holder<T> * holder)
 	{
 		empty_holders_stack_.push(holder);
 		empty_holders_stack_semaphore_.signal();
 	}
 
+	/**
+	 * @brief signal_to_all
+	 * Remove all threads from waiting on semaphores.
+	 * For example, when the highway is already stopping its work.
+	 */
 	void signal_to_all()
 	{
 		empty_holders_stack_semaphore_.signal_to_all();
@@ -112,6 +139,10 @@ public:
 		messages_stack_semaphore_.signal_to_all();
 	}
 
+	/**
+	 * @brief destroy
+	 * Preparing a mailbox for destruction
+	 */
 	void destroy()
 	{
 		empty_holders_stack_semaphore_.destroy();
@@ -120,11 +151,13 @@ public:
 	}
 
 public: // IMailBoxSendHere
-	//! передача объекта сообщения на хранение в контейнер
-	//! потокобезопасно, без блокировки но если нехватка холдеров
-	//! то может не доставить
-	//! @param t - объект
-	//! @return получилось ли доставить
+	/**
+	 * @brief send_may_fail
+	 * Passing the message object to the mailbox for storage.
+	 * Can ignore if holders run out.
+	 * @param t - message object
+	 * @return true if the send was successful
+	 */
 	bool send_may_fail(T && t)
 	{
 		Holder<T> * holder = empty_holders_stack_.pop();
@@ -148,6 +181,13 @@ public: // IMailBoxSendHere
 		return true;
 	}
 
+	/**
+	 * @brief send_may_blocked
+	 * Passing the message object to the mailbox for storage.
+	 * If the holders are over, then it will block on the semaphore
+	 *  and will wait for the holders to become free.
+	 * @param t - message object
+	 */
 	void send_may_blocked(T && t)
 	{
 		Holder<T> * holder = empty_holders_stack_.pop();
@@ -185,19 +225,19 @@ public: // IMailBoxSendHere
 private:
 	const InternalLogger logger_;
 
-	// Заполненные ожидающие обработки холдеры
+	// Filled pending holders
 	ThreadSafeStack<Holder<T>> messages_stack_;
 	Semaphore messages_stack_semaphore_;
 
-	// Пул свободных холдеров
+	// Pool of free holders
 	ThreadSafeStack<Holder<T>> empty_holders_stack_;
 	Semaphore empty_holders_stack_semaphore_;
 
-	// Ограничитель аллокаций холдеров
+	// Holder allocation limiter
 	std::atomic<std::uint32_t> capacity_{1024};
 	std::atomic<std::uint32_t> allocated_holders_{0};
 
-	// развёрнутый стэк - так что сообщения теперь в правильном порядке.
+	// Unrolled stack - so the messages are now in the correct order
 	ThreadSafeStack<Holder<T>> work_queue_;
 	Semaphore work_queue_semaphore_;
 };
