@@ -181,9 +181,7 @@ public:
 			return;
 		node->next_in_stack_ = head_.load(std::memory_order_relaxed);
 
-		// https://stackoverflow.com/questions/25199838/understanding-stdatomiccompare-exchange-weak-in-c11
-		// compare_exchange_strong  защищает только от  Spurious failure, а мне надо дождаться таки замены
-		// если head_ == node->next_in_stack_,  то меняю head_ на  node
+		// https://en.cppreference.com/w/cpp/atomic/atomic_compare_exchange
 		while (!head_.compare_exchange_weak(
 			node->next_in_stack_,
 			node,
@@ -193,17 +191,21 @@ public:
 		}
 	}
 
-	// может быть небезопасным - требуется чтобы холдер не деаллоцировался
-	// использую тут т.к. холдер-ы не деаллоцирую
+	/**
+	 * Tread safe pop an object from the stack.
+	 * This method can only be used if the holders are not dallocated.
+	 */
 	[[nodiscard]] Holder * pop() noexcept
 	{
 		Holder * re = head_.load(std::memory_order_acquire);
-		// вот тут если застыть и другой поток успеет уничтожить re,
-		// то будет SIGSEGV на обращении к re->next_in_stack_
-		// если re == null, то сразу выходит == не блокируется
+		/*
+		 * Here, if it freezes and another thread manages to destroy re,
+		 *  then there will be SIGSEGV on the call to re->next_in_stack_.
+		 * That's why I don't deallocate holders.
+		 */
 		while (
-			re &&
-			// если head_ == re, то меняю head_ на re->next_in_stack_
+			re && // exits if stack is empty
+			// if head_ == re, then change head_ to re->next_in_stack_
 			!head_.compare_exchange_weak(re, re->next_in_stack_, std::memory_order_release, std::memory_order_relaxed))
 		{
 		}
@@ -320,9 +322,7 @@ public:
 			return;
 		node->next_in_stack_ = head_.load(std::memory_order_relaxed);
 
-		// https://stackoverflow.com/questions/25199838/understanding-stdatomiccompare-exchange-weak-in-c11
-		// compare_exchange_strong  защищает только от  Spurious failure, а мне надо дождаться таки замены
-		// если head_ == node->next_in_stack_,  то меняю head_ на  node
+		// https://en.cppreference.com/w/cpp/atomic/atomic_compare_exchange
 		while (!head_.compare_exchange_weak(
 			node->next_in_stack_,
 			node,
@@ -333,17 +333,21 @@ public:
 		++size_;
 	}
 
-	// может быть небезопасным - требуется чтобы холдер не деаллоцировался
-	// использую тут т.к. холдер-ы не деаллоцирую
+	/**
+	 * Tread safe pop an object from the stack.
+	 * This method can only be used if the holders are not dallocated.
+	 */
 	[[nodiscard]] Holder * pop() noexcept
 	{
 		Holder * re = head_.load(std::memory_order_acquire);
-		// вот тут если застыть и другой поток успеет уничтожить re,
-		// то будет SIGSEGV на обращении к re->next_in_stack_
-		// если re == null, то сразу выходит == не блокируется
+		/*
+		 * Here, if it freezes and another thread manages to destroy re,
+		 *  then there will be SIGSEGV on the call to re->next_in_stack_.
+		 * That's why I don't deallocate holders.
+		 */
 		while (
-			re &&
-			// если head_ == re, то меняю head_ на re->next_in_stack_
+			re && // exits if stack is empty
+			// if head_ == re, then change head_ to re->next_in_stack_
 			!head_.compare_exchange_weak(re, re->next_in_stack_, std::memory_order_release, std::memory_order_relaxed))
 		{
 		}
