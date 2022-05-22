@@ -207,6 +207,7 @@ public:
 		IHighWayMailBoxPtr highway_mailbox,
 		bool send_may_fail = true)
 	{
+		assert(subscription_callback);
 		return send_may_fail ? create_send_may_fail(std::move(subscription_callback), std::move(highway_mailbox))
 							 : create_send_may_blocked(std::move(subscription_callback), std::move(highway_mailbox));
 	}
@@ -254,8 +255,24 @@ public:
 		SubscriptionCallbackPtr<Publication> subscription_callback,
 		IHighWayMailBoxPtr highway_mail_box)
 	{
-		assert(subscription_callback);
+		if (subscription_callback->has_run_id_control())
+		{
+			return create_send_may_fail_with_run_id_control(
+				std::move(subscription_callback),
+				std::move(highway_mail_box));
+		}
+		else
+		{
+			return create_send_may_fail_no_run_id_control(
+				std::move(subscription_callback),
+				std::move(highway_mail_box));
+		}
+	}
 
+	static Subscription create_send_may_fail_with_run_id_control(
+		SubscriptionCallbackPtr<Publication> subscription_callback,
+		IHighWayMailBoxPtr highway_mail_box)
+	{
 		struct SubscriptionProtectedHolderImpl : public SubscriptionHolder
 		{
 			SubscriptionProtectedHolderImpl(
@@ -292,14 +309,70 @@ public:
 
 		return Subscription{
 			new SubscriptionProtectedHolderImpl{std::move(subscription_callback), std::move(highway_mail_box)}};
-	}
+	} // create_send_may_fail_with_run_id_control
+
+	static Subscription create_send_may_fail_no_run_id_control(
+		SubscriptionCallbackPtr<Publication> subscription_callback,
+		IHighWayMailBoxPtr highway_mail_box)
+	{
+		struct SubscriptionProtectedHolderImpl : public SubscriptionHolder
+		{
+			SubscriptionProtectedHolderImpl(
+				SubscriptionCallbackPtr<Publication> subscription_callback,
+				IHighWayMailBoxPtr high_way_mail_box)
+				: subscription_callback_{std::move(subscription_callback)}
+				, high_way_mail_box_{std::move(high_way_mail_box)}
+			{
+			}
+
+			bool operator()(Publication publication) override
+			{
+				if (!subscription_callback_->alive())
+				{
+					return false;
+				}
+
+				auto message = hi::Runnable::create(
+					[subscription_callback = subscription_callback_, publication = std::move(publication)]() mutable
+					{
+						subscription_callback->send(std::move(publication));
+					},
+					subscription_callback_->get_code_filename(),
+					subscription_callback_->get_code_line());
+
+				return high_way_mail_box_->send_may_fail(std::move(message));
+			}
+
+			SubscriptionCallbackPtr<Publication> subscription_callback_;
+			IHighWayMailBoxPtr high_way_mail_box_;
+		};
+
+		return Subscription{
+			new SubscriptionProtectedHolderImpl{std::move(subscription_callback), std::move(highway_mail_box)}};
+	} // create_send_may_fail_no_run_id_control
 
 	static Subscription create_send_may_blocked(
 		SubscriptionCallbackPtr<Publication> subscription_callback,
 		IHighWayMailBoxPtr highway_mail_box)
 	{
-		assert(subscription_callback);
+		if (subscription_callback->has_run_id_control())
+		{
+			return create_send_may_blocked_with_run_id_control(
+				std::move(subscription_callback),
+				std::move(highway_mail_box));
+		}
+		else
+		{
+			return create_send_may_blocked_no_run_id_control(
+				std::move(subscription_callback),
+				std::move(highway_mail_box));
+		}
+	}
 
+	static Subscription create_send_may_blocked_with_run_id_control(
+		SubscriptionCallbackPtr<Publication> subscription_callback,
+		IHighWayMailBoxPtr highway_mail_box)
+	{
 		struct SubscriptionProtectedHolderImpl : public SubscriptionHolder
 		{
 			SubscriptionProtectedHolderImpl(
@@ -336,7 +409,47 @@ public:
 
 		return Subscription{
 			new SubscriptionProtectedHolderImpl{std::move(subscription_callback), std::move(highway_mail_box)}};
-	}
+	} // create_send_may_blocked_with_run_id_control
+
+	static Subscription create_send_may_blocked_no_run_id_control(
+		SubscriptionCallbackPtr<Publication> subscription_callback,
+		IHighWayMailBoxPtr highway_mail_box)
+	{
+		struct SubscriptionProtectedHolderImpl : public SubscriptionHolder
+		{
+			SubscriptionProtectedHolderImpl(
+				SubscriptionCallbackPtr<Publication> subscription_callback,
+				IHighWayMailBoxPtr high_way_mail_box)
+				: subscription_callback_{std::move(subscription_callback)}
+				, high_way_mail_box_{std::move(high_way_mail_box)}
+			{
+			}
+
+			bool operator()(Publication publication) override
+			{
+				if (!subscription_callback_->alive())
+				{
+					return false;
+				}
+
+				auto message = hi::Runnable::create(
+					[subscription_callback = subscription_callback_, publication = std::move(publication)]() mutable
+					{
+						subscription_callback->send(std::move(publication));
+					},
+					subscription_callback_->get_code_filename(),
+					subscription_callback_->get_code_line());
+
+				return high_way_mail_box_->send_may_blocked(std::move(message));
+			}
+
+			SubscriptionCallbackPtr<Publication> subscription_callback_;
+			IHighWayMailBoxPtr high_way_mail_box_;
+		};
+
+		return Subscription{
+			new SubscriptionProtectedHolderImpl{std::move(subscription_callback), std::move(highway_mail_box)}};
+	} // create_send_may_blocked_no_run_id_control
 
 	static Subscription create_direct_send(SubscriptionCallbackPtr<Publication> subscription_callback)
 	{
