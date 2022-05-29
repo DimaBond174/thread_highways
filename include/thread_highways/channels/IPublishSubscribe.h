@@ -23,6 +23,22 @@ template <typename Publication>
 class SubscriptionCallback
 {
 public:
+	/**
+	 * @brief The LaunchParameters struct
+	 * The structure groups all incoming parameters for convenience.
+	 * This is convenient because with an increase in the number of
+	 * incoming parameters, you will not have to make changes to previously developed callbacks.
+	 */
+	struct LaunchParameters
+	{
+		// incoming data (publication)
+		Publication publication_;
+		// identifier with which this highway works now
+		const std::reference_wrapper<const std::atomic<std::uint32_t>> global_run_id_;
+		// your_run_id - identifier with which this highway was running when this task started
+		const std::uint32_t your_run_id_;
+	};
+
 	template <typename R, typename P>
 	static std::shared_ptr<SubscriptionCallback> create(
 		R && callback,
@@ -45,6 +61,10 @@ public:
 				{
 					return true;
 				}
+				else if constexpr (std::is_invocable_v<R, LaunchParameters>)
+				{
+					return true;
+				}
 				return false;
 			}
 
@@ -59,6 +79,7 @@ public:
 					return safe_invoke_protection_result(callback_, protector_);
 				}
 				// Could not find a compatible signature
+				// Note: Direct send does not use callbacks with highway control (global_run_id ..)
 				assert(false);
 				return false;
 			}
@@ -68,7 +89,14 @@ public:
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				if constexpr (
+				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+				{
+					return safe_invoke_protection_result(
+						callback_,
+						protector_,
+						LaunchParameters{std::move(publication), global_run_id, your_run_id});
+				}
+				else if constexpr (
 					std::is_invocable_v<R, Publication, const std::atomic<std::uint32_t> &, const std::uint32_t>)
 				{
 					return safe_invoke_protection_result(

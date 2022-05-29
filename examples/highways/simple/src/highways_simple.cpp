@@ -142,12 +142,49 @@ void long_running_task()
 	scope.print(std::string{"Task stopped:"}.append(std::to_string(stop_future.get())));
 } // long_running_task
 
+/*
+  At the request of another developer (https://habr.com/ru/post/665772/comments/#comment_24365186),
+ the ability to launch a callback was added where the incoming parameters are grouped into a ExecContextInfo structure
+*/
+void callback_with_exec_context_info()
+{
+	hi::CoutScope scope("callback_with_exec_context_info()");
+
+	std::promise<bool> start_promise;
+	auto start_future = start_promise.get_future();
+
+	std::promise<bool> stop_promise;
+	auto stop_future = stop_promise.get_future();
+
+	{
+		hi::RAIIdestroy highway{hi::make_self_shared<hi::SingleThreadHighWay<>>()};
+
+		highway.object_->post(
+			[&](const hi::Runnable::LaunchParameters & exec_context_info)
+			{
+				// Say task started
+				start_promise.set_value(true);
+				// Long running algorithm
+				while (exec_context_info.global_run_id_.get() == exec_context_info.your_run_id_)
+				{
+					std::this_thread::sleep_for(10ms);
+				}
+				// Say task stopped
+				stop_promise.set_value(true);
+			});
+		scope.print(std::string{"Task started:"}.append(std::to_string(start_future.get())));
+	}
+
+	scope.print(std::string{"Task stopped:"}.append(std::to_string(stop_future.get())));
+} // callback_with_exec_context_info
+
 int main(int /* argc */, char ** /* argv */)
 {
 	post_lambda_on_highway();
 	using_protector();
 	multithreading();
 	long_running_task();
+	callback_with_exec_context_info();
 
 	std::cout << "Tests finished" << std::endl;
 	return 0;

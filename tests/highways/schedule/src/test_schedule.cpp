@@ -126,3 +126,118 @@ TEST(TestSchedule, CheckScheduleStartTimes)
 	}
 	highway->destroy();
 }
+
+TEST(TestSchedule, ServiceWithLaunchParameters)
+{
+	auto highway = hi::make_self_shared<hi::SingleThreadHighWayWithScheduler<>>(
+		"SingleThreadHighWayWithScheduler:test schedule",
+		nullptr,
+		10ms,
+		10ms);
+
+	std::promise<bool> promise;
+	auto future = promise.get_future();
+
+	std::atomic_bool long_running_algorithm_was_aborted{false};
+
+	struct Service
+	{
+		Service(std::promise<bool> & promise, std::atomic_bool & long_running_algorithm_was_aborted)
+			: promise_{promise}
+			, long_running_algorithm_was_aborted_{long_running_algorithm_was_aborted}
+		{
+		}
+
+		void operator()(hi::ReschedulableRunnable::LaunchParameters params)
+		{
+			hi::RAIIfinaliser finaliser{[&]
+										{
+											// Schedule next start
+											params.schedule_.get().schedule_launch_in(100ms);
+										}};
+			++starts_;
+			if (starts_ < 2)
+			{
+				return;
+			}
+
+			// Long running algorithm
+			const auto start_time = std::chrono::steady_clock::now();
+			promise_.get().set_value(true);
+			for (auto cur_time = std::chrono::steady_clock::now(); (cur_time - start_time) < 5s;
+				 cur_time = std::chrono::steady_clock::now())
+			{
+				std::this_thread::sleep_for(100ms);
+				if ((params.global_run_id_.get() != params.your_run_id_))
+				{
+					long_running_algorithm_was_aborted_.get().store(true);
+					break;
+				}
+			}
+		}
+
+		const std::reference_wrapper<std::promise<bool>> promise_;
+		const std::reference_wrapper<std::atomic_bool> long_running_algorithm_was_aborted_;
+		std::uint32_t starts_{0};
+	};
+
+	highway->add_reschedulable_runnable(Service{promise, long_running_algorithm_was_aborted}, __FILE__, __LINE__);
+
+	EXPECT_TRUE(future.get());
+	highway->destroy();
+	EXPECT_TRUE(long_running_algorithm_was_aborted);
+}
+
+TEST(TestSchedule, ServiceWithLaunchParametersAndDestroyByProtector)
+{
+	auto highway = hi::make_self_shared<hi::SingleThreadHighWayWithScheduler<>>(
+		"SingleThreadHighWayWithScheduler:test schedule",
+		nullptr,
+		10ms,
+		10ms);
+
+	std::promise<bool> promise_will_scheduled;
+	auto future_will_scheduled = promise_will_scheduled.get_future();
+
+	std::promise<bool> promise_will_destroyed_by_protector;
+	auto future_will_destroyed_by_protector = promise_will_destroyed_by_protector.get_future();
+
+	struct Service
+	{
+		Service(std::promise<bool> & promise_will_scheduled, std::promise<bool> & promise_will_destroyed_by_protector)
+			: promise_will_scheduled_{promise_will_scheduled}
+			, promise_will_destroyed_by_protector_{promise_will_destroyed_by_protector}
+		{
+		}
+		~Service()
+		{
+			promise_will_destroyed_by_protector_.get().set_value(true);
+		}
+
+		void operator()(hi::ReschedulableRunnable::LaunchParameters params)
+		{
+			++starts_;
+			if (starts_ == 2)
+			{
+				promise_will_scheduled_.get().set_value(true);
+			}
+			params.schedule_.get().schedule_launch_in(100ms);
+		}
+
+		const std::reference_wrapper<std::promise<bool>> promise_will_scheduled_;
+		const std::reference_wrapper<std::promise<bool>> promise_will_destroyed_by_protector_;
+		std::uint32_t starts_{0};
+	};
+
+	auto protector = std::make_shared<bool>();
+	highway->add_reschedulable_runnable(
+		std::make_unique<Service>(promise_will_scheduled, promise_will_destroyed_by_protector),
+		std::weak_ptr(protector),
+		__FILE__,
+		__LINE__);
+
+	EXPECT_TRUE(future_will_scheduled.get());
+	protector.reset();
+	EXPECT_TRUE(future_will_destroyed_by_protector.get());
+	highway->destroy();
+}

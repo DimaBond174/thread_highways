@@ -51,7 +51,11 @@ public:
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
+				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+				{
+					r_(LaunchParameters{global_run_id, your_run_id});
+				}
+				else if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
 				{
 					r_(global_run_id, your_run_id);
 				}
@@ -62,10 +66,14 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && r = *r_;
-					if constexpr (std::is_invocable_v<
-									  decltype(r),
-									  const std::atomic<std::uint32_t> &,
-									  const std::uint32_t>)
+					if constexpr (std::is_invocable_v<decltype(r), LaunchParameters>)
+					{
+						r(LaunchParameters{global_run_id, your_run_id});
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(r),
+										   const std::atomic<std::uint32_t> &,
+										   const std::uint32_t>)
 					{
 						r(global_run_id, your_run_id);
 					}
@@ -119,7 +127,11 @@ public:
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
+				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+				{
+					safe_invoke_void(runnable_, protector_, LaunchParameters{global_run_id, your_run_id});
+				}
+				else if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
 				{
 					safe_invoke_void(runnable_, protector_, global_run_id, your_run_id);
 				}
@@ -130,16 +142,20 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && r = *runnable_;
-					if constexpr (std::is_invocable_v<
-									  decltype(r),
-									  const std::atomic<std::uint32_t> &,
-									  const std::uint32_t>)
+					if constexpr (std::is_invocable_v<decltype(r), LaunchParameters>)
 					{
-						r(global_run_id, your_run_id);
+						safe_invoke_void(r, protector_, LaunchParameters{global_run_id, your_run_id});
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(r),
+										   const std::atomic<std::uint32_t> &,
+										   const std::uint32_t>)
+					{
+						safe_invoke_void(r, protector_, global_run_id, your_run_id);
 					}
 					else
 					{
-						r();
+						safe_invoke_void(r, protector_);
 					}
 				}
 				else
@@ -182,6 +198,20 @@ public:
 		rhs.runnable_ = nullptr;
 		return *this;
 	}
+
+	/**
+	 * @brief The LaunchParameters struct
+	 * The structure groups all incoming parameters for convenience.
+	 * This is convenient because with an increase in the number of
+	 * incoming parameters, you will not have to make changes to previously developed callbacks.
+	 */
+	struct LaunchParameters
+	{
+		// identifier with which this highway works now
+		const std::reference_wrapper<const std::atomic<std::uint32_t>> global_run_id_;
+		// your_run_id - identifier with which this highway was running when this task started
+		const std::uint32_t your_run_id_;
+	};
 
 	void run(const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id)
 	{

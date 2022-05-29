@@ -17,6 +17,12 @@
 namespace hi
 {
 
+/**
+ * @brief The INode class
+ * Base class for execution tree nodes.
+ * This interface can be accessed from callbacks.
+ * @note thread safe
+ */
 class INode
 {
 public:

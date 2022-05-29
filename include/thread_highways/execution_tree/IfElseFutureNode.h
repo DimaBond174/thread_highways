@@ -22,6 +22,28 @@ template <typename Parameter, typename IfResult, typename ElseResult>
 class IfElseFutureNodeLogic
 {
 public:
+	/**
+	 * @brief The LaunchParameters struct
+	 * The structure groups all incoming parameters for convenience.
+	 * This is convenient because with an increase in the number of
+	 * incoming parameters, you will not have to make changes to previously developed callbacks.
+	 */
+	struct LaunchParameters
+	{
+		// incoming data (publication)
+		Parameter publication_;
+		// if result publisher
+		const std::reference_wrapper<IPublisher<IfResult>> if_result_publisher_;
+		// else result publisher
+		const std::reference_wrapper<IPublisher<ElseResult>> else_result_publisher_;
+		// accessor to base class  of the execution tree node.
+		const std::reference_wrapper<INode> node_;
+		// identifier with which this highway works now
+		const std::reference_wrapper<const std::atomic<std::uint32_t>> global_run_id_;
+		// your_run_id - identifier with which this highway was running when this task started
+		const std::uint32_t your_run_id_;
+	};
+
 	template <typename R, typename P>
 	static std::shared_ptr<IfElseFutureNodeLogic<Parameter, IfResult, ElseResult>> create(
 		R && callback,
@@ -47,14 +69,27 @@ public:
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				if constexpr (std::is_invocable_v<
-								  R,
-								  Parameter,
-								  IPublisher<IfResult> &,
-								  IPublisher<ElseResult> &,
-								  INode &,
-								  const std::atomic<std::uint32_t> &,
-								  const std::uint32_t>)
+				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+				{
+					safe_invoke_void(
+						callback_,
+						protector_,
+						LaunchParameters{
+							std::move(publication),
+							if_result_publisher,
+							else_result_publisher,
+							node,
+							global_run_id,
+							your_run_id});
+				}
+				else if constexpr (std::is_invocable_v<
+									   R,
+									   Parameter,
+									   IPublisher<IfResult> &,
+									   IPublisher<ElseResult> &,
+									   INode &,
+									   const std::atomic<std::uint32_t> &,
+									   const std::uint32_t>)
 				{
 					safe_invoke_void(
 						callback_,
@@ -110,14 +145,27 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && callback = *callback_;
-					if constexpr (std::is_invocable_v<
-									  decltype(callback),
-									  Parameter,
-									  IPublisher<IfResult> &,
-									  IPublisher<ElseResult> &,
-									  INode &,
-									  const std::atomic<std::uint32_t> &,
-									  const std::uint32_t>)
+					if constexpr (std::is_invocable_v<decltype(callback), LaunchParameters>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							LaunchParameters{
+								std::move(publication),
+								if_result_publisher,
+								else_result_publisher,
+								node,
+								global_run_id,
+								your_run_id});
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   Parameter,
+										   IPublisher<IfResult> &,
+										   IPublisher<ElseResult> &,
+										   INode &,
+										   const std::atomic<std::uint32_t> &,
+										   const std::uint32_t>)
 					{
 						safe_invoke_void(
 							callback,

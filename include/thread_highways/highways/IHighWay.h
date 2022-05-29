@@ -154,6 +154,25 @@ public:
 	/**
 	 * Setting a task for execution
 	 *
+	 * @param runnable - task for execution
+	 * @param send_may_fail - is this task required to be completed?
+	 *	(some tasks can be skipped if there is not enough RAM)
+	 */
+	void post(Runnable && runnable, const bool send_may_fail = true)
+	{
+		if (send_may_fail)
+		{
+			bundle_.mail_box_.send_may_fail(std::move(runnable));
+		}
+		else
+		{
+			bundle_.mail_box_.send_may_blocked(std::move(runnable));
+		}
+	}
+
+	/**
+	 * Setting a task for execution
+	 *
 	 * @param r - task for execution
 	 * @param send_may_fail - is this task required to be completed?
 	 *	(some tasks can be skipped if there is not enough RAM)
@@ -167,15 +186,7 @@ public:
 		std::string filename = __FILE__,
 		const unsigned int line = __LINE__)
 	{
-		auto runnable = Runnable::create<R>(std::move(r), std::move(filename), line);
-		if (send_may_fail)
-		{
-			bundle_.mail_box_.send_may_fail(std::move(runnable));
-		}
-		else
-		{
-			bundle_.mail_box_.send_may_blocked(std::move(runnable));
-		}
+		post(Runnable::create<R>(std::move(r), std::move(filename), line), send_may_fail);
 	}
 
 	/**
@@ -196,15 +207,7 @@ public:
 		std::string filename = __FILE__,
 		const unsigned int line = __LINE__)
 	{
-		auto runnable = Runnable::create<R>(std::move(r), std::move(protector), std::move(filename), line);
-		if (send_may_fail)
-		{
-			bundle_.mail_box_.send_may_fail(std::move(runnable));
-		}
-		else
-		{
-			bundle_.mail_box_.send_may_blocked(std::move(runnable));
-		}
+		post(Runnable::create<R>(std::move(r), std::move(protector), std::move(filename), line), send_may_fail);
 	}
 
 	std::string get_name()

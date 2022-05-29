@@ -104,4 +104,104 @@ TEST(TestAggregatingFutureNode, AggregateSum)
 	EXPECT_EQ(1, checker->exec_counter_);
 }
 
+TEST(TestAggregatingFutureNode, UsingLaunchParameters)
+{
+	const auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
+	const auto highway_mailbox = highway->mailbox();
+
+	struct GeoPosition
+	{
+		double latitude_;
+		double longitude_;
+	};
+
+	struct AggregatingBundle
+	{
+		// no need in mutex because of hi::SerialHighWay
+		std::map<std::uint32_t, GeoPosition> operands_map_;
+	};
+
+	const std::uint32_t incoming_threads{4};
+	std::atomic<std::uint32_t> unique_senders_count{0};
+	auto aggregating_future = hi::AggregatingFutureNode<GeoPosition, AggregatingBundle, GeoPosition>::create(
+		[&](hi::AggregatingFutureNodeLogic<GeoPosition, AggregatingBundle, GeoPosition>::LaunchParameters params)
+		{
+			auto && aggregating_bundle = params.aggregating_bundle_.get();
+			aggregating_bundle.operands_map_[params.operand_id_] = params.operand_value_;
+			double sum_latitude{0};
+			double sum_longitude{0};
+			for (auto && it : aggregating_bundle.operands_map_)
+			{
+				sum_latitude += it.second.latitude_;
+				sum_longitude += it.second.longitude_;
+			}
+			const auto size = static_cast<std::uint32_t>(aggregating_bundle.operands_map_.size());
+			unique_senders_count = size;
+			params.result_publisher_.get().publish(GeoPosition{sum_latitude / size, sum_longitude / size});
+		},
+		highway->protector_for_tests_only(),
+		highway);
+
+	GeoPosition last_result{};
+	hi::subscribe(
+		aggregating_future->result_channel(),
+		[&](GeoPosition result)
+		{
+			last_result = result;
+		},
+		highway->protector_for_tests_only(),
+		highway->mailbox());
+
+	const GeoPosition real_geo_position{56.7951312, 60.5928054};
+	const auto location_sensor = [&](const double d_latitude, const double d_longitude)
+	{
+		auto sensor = hi::make_self_shared<hi::PublishOneForMany<GeoPosition>>();
+		aggregating_future->add_operand_channel(sensor->subscribe_channel());
+		sensor->publish(
+			GeoPosition{real_geo_position.latitude_ + d_latitude, real_geo_position.longitude_ + d_longitude});
+	};
+
+	std::thread gps(
+		[&]
+		{
+			// so that the name of the thread can be seen in the debugger
+			hi::set_this_thread_name("gps");
+			location_sensor(0.0, -0.1);
+		});
+	std::thread beidou(
+		[&]
+		{
+			// so that the name of the thread can be seen in the debugger
+			hi::set_this_thread_name("beidou");
+			location_sensor(0.0, 0.1);
+		});
+	std::thread galileo(
+		[&]
+		{
+			// so that the name of the thread can be seen in the debugger
+			hi::set_this_thread_name("galileo");
+			location_sensor(-0.1, 0.0);
+		});
+	std::thread glonass(
+		[&]
+		{
+			// so that the name of the thread can be seen in the debugger
+			hi::set_this_thread_name("glonass");
+			location_sensor(0.1, 0.0);
+		});
+
+	gps.join();
+	beidou.join();
+	galileo.join();
+	glonass.join();
+
+	highway->flush_tasks();
+
+	EXPECT_EQ(unique_senders_count, incoming_threads);
+	EXPECT_DOUBLE_EQ(last_result.latitude_, real_geo_position.latitude_);
+	EXPECT_DOUBLE_EQ(last_result.longitude_, real_geo_position.longitude_);
+
+	highway->destroy();
+}
+
 } // namespace hi

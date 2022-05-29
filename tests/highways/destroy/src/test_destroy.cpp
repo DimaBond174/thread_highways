@@ -231,4 +231,65 @@ TYPED_TEST(TestHighwayDestroy, DestroyWithRAIIdestroy)
 	}
 }
 
+TYPED_TEST(TestHighwayDestroy, StopWithLaunchParameters)
+{
+	std::promise<bool> start_promise;
+	auto start_future = start_promise.get_future();
+
+	std::promise<bool> stop_promise;
+	auto stop_future = stop_promise.get_future();
+
+	{
+		hi::RAIIdestroy highway{hi::make_self_shared<hi::SingleThreadHighWay<>>()};
+
+		highway.object_->post(
+			[&](const hi::Runnable::LaunchParameters & exec_context_info)
+			{
+				// Say task started
+				start_promise.set_value(true);
+				// Long running algorithm
+				while (exec_context_info.global_run_id_.get() == exec_context_info.your_run_id_)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds{10});
+				}
+				// Say task stopped
+				stop_promise.set_value(true);
+			});
+		EXPECT_TRUE(start_future.get());
+	}
+	EXPECT_TRUE(stop_future.get());
+}
+
+TYPED_TEST(TestHighwayDestroy, StopWithLaunchParameters_Protector)
+{
+	std::promise<bool> start_promise;
+	auto start_future = start_promise.get_future();
+
+	std::promise<bool> stop_promise;
+	auto stop_future = stop_promise.get_future();
+
+	auto protector = std::make_shared<bool>();
+	{
+		hi::RAIIdestroy highway{hi::make_self_shared<hi::SingleThreadHighWay<>>()};
+
+		highway.object_->post(
+			[&](hi::Runnable::LaunchParameters params)
+			{
+				// Say task started
+				start_promise.set_value(true);
+				// Long running algorithm
+				while (params.global_run_id_.get() == params.your_run_id_)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds{10});
+				}
+				// Say task stopped
+				stop_promise.set_value(true);
+			},
+			std::weak_ptr(protector));
+
+		EXPECT_TRUE(start_future.get());
+	}
+	EXPECT_TRUE(stop_future.get());
+}
+
 } // namespace hi

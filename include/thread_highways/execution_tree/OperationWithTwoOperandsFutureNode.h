@@ -30,6 +30,27 @@ template <typename Operand1, typename Operand2, typename Result>
 class OperationWithTwoOperandsFutureNodeLogic
 {
 public:
+	/**
+	 * @brief The LaunchParameters struct
+	 * The structure groups all incoming parameters for convenience.
+	 * This is convenient because with an increase in the number of
+	 * incoming parameters, you will not have to make changes to previously developed callbacks.
+	 */
+	struct LaunchParameters
+	{
+		// incoming data (publication from channel1)
+		Operand1 operand1_;
+		// incoming data (publication from channel2)
+		Operand2 operand2_;
+		// result publisher
+		const std::reference_wrapper<IPublisher<Result>> result_publisher_;
+		// accessor to base class of the execution tree node.
+		const std::reference_wrapper<INode> node_;
+		// identifier with which this highway works now
+		const std::reference_wrapper<const std::atomic<std::uint32_t>> global_run_id_;
+		// your_run_id - identifier with which this highway was running when this task started
+		const std::uint32_t your_run_id_;
+	};
 	template <typename R, typename P>
 	static std::shared_ptr<OperationWithTwoOperandsFutureNodeLogic<Operand1, Operand2, Result>> create(
 		R && callback,
@@ -55,14 +76,27 @@ public:
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				if constexpr (std::is_invocable_v<
-								  R,
-								  Operand1,
-								  Operand2,
-								  IPublisher<Result> &,
-								  INode &,
-								  const std::atomic<std::uint32_t> &,
-								  const std::uint32_t>)
+				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+				{
+					safe_invoke_void(
+						callback_,
+						protector_,
+						LaunchParameters{
+							std::move(operand1),
+							std::move(operand2),
+							result_publisher,
+							node,
+							global_run_id,
+							your_run_id});
+				}
+				else if constexpr (std::is_invocable_v<
+									   R,
+									   Operand1,
+									   Operand2,
+									   IPublisher<Result> &,
+									   INode &,
+									   const std::atomic<std::uint32_t> &,
+									   const std::uint32_t>)
 				{
 					safe_invoke_void(
 						callback_,
@@ -112,14 +146,27 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && callback = *callback_;
-					if constexpr (std::is_invocable_v<
-									  decltype(callback),
-									  Operand1,
-									  Operand2,
-									  IPublisher<Result> &,
-									  INode &,
-									  const std::atomic<std::uint32_t> &,
-									  const std::uint32_t>)
+					if constexpr (std::is_invocable_v<decltype(callback), LaunchParameters>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							LaunchParameters{
+								std::move(operand1),
+								std::move(operand2),
+								result_publisher,
+								node,
+								global_run_id,
+								your_run_id});
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   Operand1,
+										   Operand2,
+										   IPublisher<Result> &,
+										   INode &,
+										   const std::atomic<std::uint32_t> &,
+										   const std::uint32_t>)
 					{
 						safe_invoke_void(
 							callback,

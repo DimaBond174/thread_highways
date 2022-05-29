@@ -26,6 +26,32 @@ template <typename Operand, typename AggregatingBundle, typename Result>
 class AggregatingFutureNodeLogic
 {
 public:
+	/**
+	 * @brief The LaunchParameters struct
+	 * The structure groups all incoming parameters for convenience.
+	 * This is convenient because with an increase in the number of
+	 * incoming parameters, you will not have to make changes to previously developed callbacks.
+	 */
+	struct LaunchParameters
+	{
+		// the id number of the incoming channel from which the data came
+		const std::uint32_t operand_id_;
+		// incoming data (publication)
+		Operand operand_value_;
+		// object for storing aggregated data
+		const std::reference_wrapper<AggregatingBundle> aggregating_bundle_;
+		// result publisher
+		const std::reference_wrapper<IPublisher<Result>> result_publisher_;
+		// total number of the incoming channels from which the data can came
+		const std::uint32_t operands_count_;
+		// accessor to base class  of the execution tree node.
+		const std::reference_wrapper<INode> node_;
+		// identifier with which this highway works now
+		const std::reference_wrapper<const std::atomic<std::uint32_t>> global_run_id_;
+		// your_run_id - identifier with which this highway was running when this task started
+		const std::uint32_t your_run_id_;
+	};
+
 	template <typename R, typename P>
 	static std::shared_ptr<AggregatingFutureNodeLogic<Operand, AggregatingBundle, Result>> create(
 		R && callback,
@@ -52,16 +78,31 @@ public:
 				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
 				[[maybe_unused]] const std::uint32_t your_run_id) override
 			{
-				if constexpr (std::is_invocable_v<
-								  R,
-								  std::uint32_t,
-								  Operand,
-								  AggregatingBundle &,
-								  IPublisher<Result> &,
-								  std::uint32_t,
-								  INode &,
-								  const std::atomic<std::uint32_t> &,
-								  const std::uint32_t>)
+				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+				{
+					safe_invoke_void(
+						callback_,
+						protector_,
+						LaunchParameters{
+							operand_id,
+							std::move(operand_value),
+							aggregating_bundle,
+							result_publisher,
+							operands_count,
+							node,
+							global_run_id,
+							your_run_id});
+				}
+				else if constexpr (std::is_invocable_v<
+									   R,
+									   std::uint32_t,
+									   Operand,
+									   AggregatingBundle &,
+									   IPublisher<Result> &,
+									   std::uint32_t,
+									   INode &,
+									   const std::atomic<std::uint32_t> &,
+									   const std::uint32_t>)
 				{
 					safe_invoke_void(
 						callback_,
@@ -129,16 +170,31 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && callback = *callback_;
-					if constexpr (std::is_invocable_v<
-									  decltype(callback),
-									  std::uint32_t,
-									  Operand,
-									  AggregatingBundle &,
-									  IPublisher<Result> &,
-									  std::uint32_t,
-									  INode &,
-									  const std::atomic<std::uint32_t> &,
-									  const std::uint32_t>)
+					if constexpr (std::is_invocable_v<decltype(callback), LaunchParameters>)
+					{
+						safe_invoke_void(
+							callback,
+							protector_,
+							LaunchParameters{
+								operand_id,
+								std::move(operand_value),
+								aggregating_bundle,
+								result_publisher,
+								operands_count,
+								node,
+								global_run_id,
+								your_run_id});
+					}
+					else if constexpr (std::is_invocable_v<
+										   decltype(callback),
+										   std::uint32_t,
+										   Operand,
+										   AggregatingBundle &,
+										   IPublisher<Result> &,
+										   std::uint32_t,
+										   INode &,
+										   const std::atomic<std::uint32_t> &,
+										   const std::uint32_t>)
 					{
 						safe_invoke_void(
 							callback,
@@ -461,6 +517,11 @@ public:
 			send_may_fail,
 			__FILE__,
 			__LINE__);
+	}
+
+	void add_operand_channel(const ISubscribeHerePtr<Operand> & where_to_subscribe, bool send_may_fail = true)
+	{
+		add_operand_channel(*where_to_subscribe, send_may_fail);
 	}
 
 	ISubscribeHerePtr<Result> result_channel()

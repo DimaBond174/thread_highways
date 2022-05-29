@@ -22,7 +22,11 @@ namespace
 {
 	std::string shortened_name{"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"};
 	constexpr size_t pthread_name_length_limit = 15;
-	std::copy_n(name.begin(), std::min(name.size(), pthread_name_length_limit), shortened_name.begin());
+	const auto length = std::min(name.size(), pthread_name_length_limit);
+	if (!length)
+		return;
+	std::copy_n(name.begin(), length, shortened_name.begin());
+	shortened_name[length] = '\0';
 	pthread_setname_np(pthread_self(), shortened_name.data());
 }
 

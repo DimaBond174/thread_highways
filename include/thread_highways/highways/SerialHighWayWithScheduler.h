@@ -51,7 +51,7 @@ public:
 		std::string highway_name = "SerialHighWayWithScheduler",
 		LoggerPtr logger = nullptr,
 		std::chrono::milliseconds max_task_execution_time = std::chrono::milliseconds{50000},
-		std::chrono::nanoseconds timer_executes_each_ns = std::chrono::nanoseconds{1000000000})
+		std::chrono::nanoseconds timer_executes_each_ns = std::chrono::nanoseconds{100000000})
 		: IHighWay{std::move(self_protector), std::move(highway_name), std::move(logger), max_task_execution_time}
 		, timer_executes_each_ns_{timer_executes_each_ns}
 	{
