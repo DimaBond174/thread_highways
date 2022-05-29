@@ -19,6 +19,12 @@
 namespace hi
 {
 
+/**
+ * SubscriptionCallback
+ *
+ * Subscriber callback wrapper with subscription lifetime control.
+ * @note You can, by analogy with the factory create(), make your own implementations of SubscriptionCallback.
+ */
 template <typename Publication>
 class SubscriptionCallback
 {
@@ -39,6 +45,14 @@ public:
 		const std::uint32_t your_run_id_;
 	};
 
+	/**
+	 * Factory for creating of default SubscriptionCallback
+	 * @param callback - code to execute (must implements operator())
+	 * @param protector - object that implements the lock() operator
+	 * If the protector.lock() returned false, then the subscription is considered broken
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 */
 	template <typename R, typename P>
 	static std::shared_ptr<SubscriptionCallback> create(
 		R && callback,
@@ -215,21 +229,30 @@ private:
 template <typename Publication>
 using SubscriptionCallbackPtr = std::shared_ptr<SubscriptionCallback<Publication>>;
 
+/**
+ * Subscription
+ *
+ * The generic object that the publisher works with.
+ */
 template <typename Publication>
 class Subscription
 {
 public:
-	/*!
-	 Фабрика подписок
-	 @subscription_callback - куда передавать публикацию,нужен в shared_ptr т.к. постоянно копируется в Runnable
-	 @highway_mail_box - куда постится Runnable(с захваченной публикацией и subscription_callback) для обработки
-	 @send_may_fail - обязательна ли отправка: при обязательной отправке будет ждать свободных холдеров в
-	 high_way_mail_box и тем самым может заблокироваться до тех пор пока не получит свободный холдер для отправки.
-
-	 В Холдеры помещаются объекты и после этого можно их поместить в mail_box_ - это позволяет
-	 контроллировать расход оперативной памяти.
-	 Количество холдеров можно увеличить через метод IHighWay->set_capacity(N)
-	*/
+	/**
+	 * @brief create
+	 * Subscription Factory, with shipping via highway
+	 * @param subscription_callback - where to send the publication,
+	 *  it is needed in shared_ptr because it is constantly copied to Runnable
+	 * @param highway_mailbox - where the Runnable is executing (with the captured post and subscription_callback)
+	 * @param send_may_fail - whether sending is mandatory: if sending is mandatory, it will wait for free holders in
+	 *  high_way_mail_box and thus can block until it gets a free holder to send.
+	 *  Objects are placed in Holders and after that you can put them in mail_box_ - this allows
+	 *  control memory usage. The number of holders can be increased via the IHighWay->set_capacity(N) method
+	 * @return Subscription
+	 * @note The factory below, through create_direct_send, creates a subscription through
+	 *  which messages are sent without changing the thread highway and therefore without
+	 *  holders and instantly
+	 */
 	static Subscription create(
 		SubscriptionCallbackPtr<Publication> subscription_callback,
 		IHighWayMailBoxPtr highway_mailbox,
@@ -240,11 +263,36 @@ public:
 							 : create_send_may_blocked(std::move(subscription_callback), std::move(highway_mailbox));
 	}
 
+	/**
+	 * @brief create
+	 * Subscription Factory, with instantly shipping
+	 * @param subscription_callback - where to send the publication
+	 * @return Subscription
+	 * @note for universality, the same SubscriptionCallbackPtr is used as for the factory with highways
+	 */
 	static Subscription create(SubscriptionCallbackPtr<Publication> subscription_callback)
 	{
 		return create_direct_send(std::move(subscription_callback));
 	}
 
+	/**
+	 * @brief create
+	 * Subscription Factory, with shipping via highway
+	 * @param callback - where to send the publication
+	 * @param protector - object that implements the lock() operator
+	 * If the protector.lock() returned false, then the subscription is considered broken
+	 * @param highway_mailbox - where the Runnable is executing (with the captured post and subscription_callback)
+	 * @param send_may_fail - whether sending is mandatory: if sending is mandatory, it will wait for free holders in
+	 *  high_way_mail_box and thus can block until it gets a free holder to send.
+	 *  Objects are placed in Holders and after that you can put them in mail_box_ - this allows
+	 *  control memory usage. The number of holders can be increased via the IHighWay->set_capacity(N) method
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 * @return Subscription
+	 * @note The factory below, through create_direct_send, creates a subscription through
+	 *  which messages are sent without changing the thread highway and therefore without
+	 *  holders and instantly
+	 */
 	template <typename R, typename P>
 	static Subscription create(
 		R && callback,
@@ -263,6 +311,16 @@ public:
 		return create(std::move(subscription_callback), std::move(highway_mailbox), send_may_fail);
 	} // create
 
+	/**
+	 * @brief create
+	 * Subscription Factory, with instantly shipping
+	 * @param callback - where to send the publication
+	 * @param protector - object that implements the lock() operator
+	 * If the protector.lock() returned false, then the subscription is considered broken
+	 * @param filename - file where the code is located
+	 * @param line - line in the file that contains the code
+	 * @return Subscription
+	 */
 	template <typename R, typename P>
 	static Subscription create(
 		R && callback,
@@ -545,30 +603,30 @@ private:
 	SubscriptionHolder * subscription_holder_{nullptr};
 }; // Subscription
 
-/*
- Интерфейс в котором будущие подписчики смогут подписаться
-*/
+/**
+ *  @brief ISubscribeHere
+ *  Interface where future subscribers can subscribe
+ */
 template <typename Publication>
 struct ISubscribeHere
 {
 	virtual ~ISubscribeHere() = default;
 
-	// Для UnSubscribe надо чтобы protector в SubscriptionCallback перестал lock() отрабатывать
 	virtual void subscribe(Subscription<Publication> && subscription) = 0;
 };
 
 template <typename Publication>
 using ISubscribeHerePtr = std::shared_ptr<ISubscribeHere<Publication>>;
 
-/*
- Интерфейс в котором публиковать
-*/
+/**
+ *  @brief IPublisher
+ *  Interface through which you can publish
+ */
 template <typename Publication>
 struct IPublisher
 {
 	virtual ~IPublisher() = default;
 
-	//! Разослать подписчикам publication (каждый подписчик получает в своём потоке)
 	virtual void publish(Publication publication) const = 0;
 };
 
@@ -679,6 +737,17 @@ void subscribe(
 	subscribe(*subscribe_channel, std::move(callback), std::move(protector), std::move(filename), line);
 }
 
+/**
+ * @brief protect
+ * Wrapping a subscription with an additional protector.
+ * For example, to add an additional switch to a subscription.
+ *
+ * @param subscription - someone else's subscription
+ * @param protector - your optional subscription switch
+ * @note usage example:
+ * https://github.com/DimaBond174/thread_highways/blob/main/tests/execution_tree/self-developing_execution_tree/src/test_self_develop.cpp
+ * @note by analogy, you can create your custom subscriptions
+ */
 template <typename Publication, typename Protector>
 Subscription<Publication> protect(Subscription<Publication> && subscription, Protector protector)
 {

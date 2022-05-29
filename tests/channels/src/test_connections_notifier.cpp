@@ -20,9 +20,9 @@ namespace hi
 namespace
 {
 using publisher_types = ::testing::Types<
-	// PublishOneForManyWithConnectionsNotifier<std::uint32_t>,
-	// PublishManyForManyWithConnectionsNotifier<std::uint32_t>,
-	// PublishOneForManyWithConnectionsNotifier<std::string>,
+	PublishOneForManyWithConnectionsNotifier<std::uint32_t>,
+	PublishManyForManyWithConnectionsNotifier<std::uint32_t>,
+	PublishOneForManyWithConnectionsNotifier<std::string>,
 	PublishManyForManyWithConnectionsNotifier<std::string>>;
 
 template <class T>
