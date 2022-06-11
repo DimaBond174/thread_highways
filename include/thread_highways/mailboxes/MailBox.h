@@ -167,7 +167,7 @@ public: // IMailBoxSendHere
 		}
 		else
 		{
-			if (capacity_.load(std::memory_order_relaxed) <= allocated_holders_.load(std::memory_order_relaxed))
+			if (capacity_.load(std::memory_order_relaxed) < allocated_holders_.load(std::memory_order_relaxed))
 			{
 				logger_("MailBox: no more holders", __FILE__, __LINE__);
 				return false;
