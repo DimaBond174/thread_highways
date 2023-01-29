@@ -53,6 +53,11 @@ struct RAIIdestroy
 		object_->destroy();
 	}
 
+    T& operator->()
+    {
+        return object_;
+    }
+
 	T object_;
 };
 

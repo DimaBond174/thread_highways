@@ -5,15 +5,16 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef THREAD_MAIL_BOX_WITH_CAPACITY_AND_SEMA_H
-#define THREAD_MAIL_BOX_WITH_CAPACITY_AND_SEMA_H
+#ifndef THREADS_HIGHWAYS_MAILBOXES_MAIL_BOX_H
+#define THREADS_HIGHWAYS_MAILBOXES_MAIL_BOX_H
 
-#include <thread_highways/tools/logger.h>
-#include <thread_highways/tools/os/system_switch.h>
+#include <thread_highways/tools/exception.h>
+#include <thread_highways/tools/semaphore.h>
 #include <thread_highways/tools/stack.h>
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -32,11 +33,6 @@ template <typename T>
 class MailBox
 {
 public:
-	MailBox(InternalLogger logger)
-		: logger_{std::move(logger)}
-	{
-	}
-
 	/**
 	 * @brief set_capacity
 	 * Setting the maximum number of holders in operation.
@@ -48,70 +44,34 @@ public:
 		capacity_.store(capacity, std::memory_order_release);
 	}
 
-	/**
-	 * @brief wait_for_new_messages
-	 * Waiting for new messages using a semaphore.
-	 */
-	void wait_for_new_messages()
-	{
-		if (!messages_stack_.access_stack())
-		{
-			messages_stack_semaphore_.wait();
-		}
-	}
-
-	/**
-	 * @brief wait_for_new_messages
-	 * Waiting for new messages with a semaphore, waiting time is limited.
-	 * @param ns - max wait time
-	 */
-	void wait_for_new_messages(std::chrono::nanoseconds ns)
-	{
-		if (!messages_stack_.access_stack())
-		{
-			messages_stack_semaphore_.wait_for(ns);
-		}
-	}
-
-	/**
-	 * @brief load_new_messages
-	 * Moving the stack of current messages
-	 *  so that the message queue is in the correct order.
-	 * @note typically this method is called from the main thread
-	 * and then notifies the worker threads of the work to be done.
-	 */
-	void load_new_messages()
-	{
-		messages_stack_.move_to(work_queue_);
-	}
-
-	/**
-	 * @brief signal_to_work_queue_semaphore
-	 * Notifying worker threads that work has appeared.
-	 * @param count - the number of workers who need to open the semaphore.
-	 */
-	void signal_to_work_queue_semaphore(std::uint32_t count)
-	{
-		work_queue_semaphore_.signal(count);
-	}
-
-	/**
-	 * @brief worker_wait_for_messages
-	 * Setting a worker thread to wait on a semaphore.
-	 */
-	void worker_wait_for_messages()
-	{
-		work_queue_semaphore_.wait();
-	}
+    void move_to(SingleThreadStack<Holder<T>>& work_queue, std::chrono::nanoseconds max_wait)
+    {
+        if (!messages_stack_.access_stack())
+        {
+            messages_stack_semaphore_.wait_for(max_wait);
+        }
+        messages_stack_.move_to(work_queue);
+    }
 
 	/**
 	 * @brief pop_message
 	 * Extracting one holder with a message.
+     * Do not use it with move_to();
 	 * @return holder or nullptr
 	 */
 	[[nodiscard]] Holder<T> * pop_message()
 	{
-		return work_queue_.pop();
+        Holder<T> * re = work_queue_.pop();
+        while (!re && keep_execution_.load(std::memory_order_acquire))
+        {
+            if (!messages_stack_.access_stack())
+            {
+                messages_stack_semaphore_.wait();
+            }
+            messages_stack_.move_to(work_queue_);
+            re = work_queue_.pop();
+        }
+        return re;
 	}
 
 	/**
@@ -128,25 +88,13 @@ public:
 	}
 
 	/**
-	 * @brief signal_to_all
-	 * Remove all threads from waiting on semaphores.
-	 * For example, when the highway is already stopping its work.
-	 */
-	void signal_to_all()
-	{
-		empty_holders_stack_semaphore_.signal_to_all();
-		work_queue_semaphore_.signal_to_all();
-		messages_stack_semaphore_.signal_to_all();
-	}
-
-	/**
 	 * @brief destroy
 	 * Preparing a mailbox for destruction
 	 */
 	void destroy()
 	{
+        keep_execution_.store(false, std::memory_order_release);
 		empty_holders_stack_semaphore_.destroy();
-		work_queue_semaphore_.destroy();
 		messages_stack_semaphore_.destroy();
 	}
 
@@ -169,7 +117,6 @@ public: // IMailBoxSendHere
 		{
 			if (capacity_.load(std::memory_order_relaxed) < allocated_holders_.load(std::memory_order_relaxed))
 			{
-				logger_("MailBox: no more holders", __FILE__, __LINE__);
 				return false;
 			}
 			++allocated_holders_;
@@ -223,8 +170,6 @@ public: // IMailBoxSendHere
 	}
 
 private:
-	const InternalLogger logger_;
-
 	// Filled pending holders
 	ThreadSafeStack<Holder<T>> messages_stack_;
 	Semaphore messages_stack_semaphore_;
@@ -237,11 +182,22 @@ private:
 	std::atomic<std::uint32_t> capacity_{1024};
 	std::atomic<std::uint32_t> allocated_holders_{0};
 
-	// Unrolled stack - so the messages are now in the correct order
-	ThreadSafeStack<Holder<T>> work_queue_;
-	Semaphore work_queue_semaphore_;
+    // Unrolled stack - so the messages are now in the correct order
+    ThreadSafeStack<Holder<T>> work_queue_;
+    std::atomic<bool> keep_execution_{true};
+};
+
+template <typename T>
+struct IMailBoxSendHere
+{
+    virtual ~IMailBoxSendHere() = default;
+
+    // Multi-threaded access
+    virtual bool send_may_fail(T && t) = 0;
+    // Если вернул false, значит почтового ящика больше нет и слать снова незачем
+    virtual bool send_may_blocked(T && t) = 0;
 };
 
 } // namespace hi
 
-#endif // THREAD_MAIL_BOX_WITH_CAPACITY_AND_SEMA_H
+#endif // THREADS_HIGHWAYS_MAILBOXES_MAIL_BOX_H

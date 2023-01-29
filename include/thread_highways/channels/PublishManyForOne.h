@@ -1,7 +1,15 @@
-#ifndef PUBLISH_MANY_FOR_ONE_H
-#define PUBLISH_MANY_FOR_ONE_H
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
 
-#include <thread_highways/channels/IPublishSubscribe.h>
+#ifndef THREADS_HIGHWAYS_CHANNELS_PUBLISH_MANY_FOR_ONE_H
+#define THREADS_HIGHWAYS_CHANNELS_PUBLISH_MANY_FOR_ONE_H
+
+#include <thread_highways/channels/ISubscription.h>
+#include <thread_highways/highways/HighWay.h>
 
 namespace hi
 {
@@ -14,7 +22,7 @@ namespace hi
  * @note subscriber will not be deleted
  */
 template <typename Publication>
-class PublishManyForOne : public IPublisher<Publication>
+class PublishManyForOne
 {
 public:
 	typedef Publication PublicationType;
@@ -27,8 +35,8 @@ public:
 	 * https://github.com/DimaBond174/thread_highways/blob/main/examples/channels/publish_many_for_one/src/channels_publish_many_for_one.cpp
 	 * https://github.com/DimaBond174/thread_highways/blob/main/tests/channels/src/test_publush_many_for_one.cpp
 	 */
-	PublishManyForOne(Subscription<Publication> && subscription)
-		: subscription_{std::move(subscription)}
+    PublishManyForOne(std::weak_ptr<ISubscription<Publication>> subscription)
+        :  subscription_{std::move(subscription)}
 	{
 	}
 
@@ -50,23 +58,43 @@ public:
 	 * https://github.com/DimaBond174/thread_highways/blob/main/tests/channels/src/test_publush_many_for_one.cpp
 	 * @note below there is an option to create a subscription without rescheduling sending via highway
 	 */
-	template <typename R, typename P>
+    template <typename R>
 	PublishManyForOne(
 		R && callback,
-		P protector,
-		IHighWayMailBoxPtr highway_mailbox,
-		const bool send_may_fail = true,
-		std::string filename = __FILE__,
-		const unsigned int line = __LINE__)
-		: subscription_{Subscription<Publication>::create(
+        HighWayWeakPtr executor,
+            const char* filename, unsigned int line,
+            bool send_may_fail = true,
+            bool for_new_only = false)
+        : subscription_{for_new_only
+             ? create_subscription_for_new_only<Publication, R>(
+                              std::move(callback),
+                              std::move(executor),
+                              filename, line, send_may_fail)
+             : create_subscription<Publication, R>(
 			std::move(callback),
-			std::move(protector),
-			std::move(highway_mailbox),
-			send_may_fail,
-			std::move(filename),
-			line)}
+            std::move(executor),
+            filename, line, send_may_fail)}
 	{
 	}
+
+    template <typename R>
+    PublishManyForOne(
+        R && callback,
+        std::shared_ptr<HighWay> executor,
+            const char* filename, unsigned int line,
+            bool send_may_fail = true,
+            bool for_new_only = false)
+        :  subscription_{for_new_only
+               ? create_subscription_for_new_only<Publication, R>(
+                              std::move(callback),
+                              std::move(executor),
+                              filename, line, send_may_fail)
+                : create_subscription<Publication, R>(
+            std::move(callback),
+            std::move(executor),
+            filename, line, send_may_fail)}
+    {
+    }
 
 	/**
 	 * @brief PublishManyForOne
@@ -80,29 +108,24 @@ public:
 	 * https://github.com/DimaBond174/thread_highways/blob/main/examples/channels/publish_many_for_one/src/channels_publish_many_for_one.cpp
 	 * https://github.com/DimaBond174/thread_highways/blob/main/tests/channels/src/test_publush_many_for_one.cpp
 	 */
-	template <typename R, typename P>
-	PublishManyForOne(R && callback, P protector, std::string filename = __FILE__, const unsigned int line = __LINE__)
-		: subscription_{
-			Subscription<Publication>::create(std::move(callback), std::move(protector), std::move(filename), line)}
+    template <typename R>
+    PublishManyForOne(
+            R && callback,  const char* filename = __FILE__, const unsigned int line = __LINE__, bool send_may_fail = true, bool for_new_only = false)
+        : subscription_{for_new_only
+                         ? create_subscription_for_new_only<Publication, R>(std::move(callback), filename, line, send_may_fail)
+                           : create_subscription<Publication, R>(std::move(callback), filename, line, send_may_fail)}
 	{
 	}
 
-public: // IPublisher
-	/**
-	 * @brief publish
-	 * submit publication
-	 * @param publication
-	 * @note can be called from any thread
-	 */
-	void publish(Publication publication) const override
+    void publish(Publication publication) const
 	{
-		subscription_.send(std::move(publication));
+        subscription_->send(std::move(publication));
 	}
 
 private:
-	const Subscription<Publication> subscription_;
+    const std::shared_ptr<ISubscription<Publication>> subscription_;
 }; // PublishManyForOne
 
 } // namespace hi
 
-#endif // PUBLISH_MANY_FOR_ONE_H
+#endif // THREADS_HIGHWAYS_CHANNELS_PUBLISH_MANY_FOR_ONE_H

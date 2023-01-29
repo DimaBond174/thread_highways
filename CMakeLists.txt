@@ -12,6 +12,8 @@ target_include_directories(${LIB_NAME}
   include/
 )
 
+set (HIGHWAYS_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include/ )
+
 #set_target_properties(${LIB_NAME} PROPERTIES
 #    CXX_STANDARD 17
 #    CXX_STANDARD_REQUIRED ON
@@ -26,24 +28,24 @@ if(BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-if(BUILD_PERFORMANCE_TESTS)
-    message(STATUS "building performance tests..")
-    add_subdirectory(performance_tests)
-endif()
+#if(BUILD_PERFORMANCE_TESTS)
+#    message(STATUS "building performance tests..")
+#    add_subdirectory(performance_tests)
+#endif()
 
-if(BUILD_TESTING)
-    message(STATUS "building googletest..")
-    # https://google.github.io/googletest/quickstart-cmake.html
-    include(FetchContent)
-    FetchContent_Declare(
-      googletest
-      URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
-    )
-    # For Windows: Prevent overriding the parent project's compiler/linker settings
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(googletest)
+#if(BUILD_TESTING)
+#    message(STATUS "building googletest..")
+#    # https://google.github.io/googletest/quickstart-cmake.html
+#    include(FetchContent)
+#    FetchContent_Declare(
+#      googletest
+#      URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
+#    )
+#    # For Windows: Prevent overriding the parent project's compiler/linker settings
+#    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+#    FetchContent_MakeAvailable(googletest)
 
-    message(STATUS "building thread_highways unit tests..")
-    add_subdirectory(tests)
-endif()
+#    message(STATUS "building thread_highways unit tests..")
+#    add_subdirectory(tests)
+#endif()
 

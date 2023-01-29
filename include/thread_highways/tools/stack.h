@@ -35,10 +35,15 @@ template <typename Holder>
 class SingleThreadStack
 {
 public:
-	[[nodiscard]] bool not_empty() const noexcept
+    [[nodiscard]] bool empty() const noexcept
 	{
-		return !!head_;
+        return !head_;
 	}
+
+    [[nodiscard]] bool not_empty() const noexcept
+    {
+        return !!head_;
+    }
 
 	void push(Holder * node) noexcept
 	{

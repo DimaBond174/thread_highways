@@ -1,6 +1,5 @@
 add_subdirectory(buffered_retransmitter)
 add_subdirectory(connections_notifier)
-add_subdirectory(publish_many_for_many)
 add_subdirectory(publish_many_for_many_unsubscribe)
 add_subdirectory(publish_many_for_one)
 add_subdirectory(publish_one_for_many)

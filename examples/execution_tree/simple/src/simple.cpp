@@ -8,15 +8,15 @@ struct ScienceOfNotMovable
 {
 	ScienceOfNotMovable(hi::CoutScope & scope)
 		: scope_{scope}
-		, science_data_{std::make_unique<std::string>("12345")}
 	{
 		scope_.print("Science constructed");
-	}
+    }
 
-	void operator()(hi::IPublisher<std::string> & result_publisher)
+    std::optional<hi::LabeledPublication<std::string>> operator()(hi::LabeledPublication<int> data)
 	{
 		scope_.print("Science calculations");
-		result_publisher.publish(std::string{"Scientific discovery: "}.append(*science_data_));
+        science_data_->append(std::to_string(data.publication_) + ", ");
+        return *science_data_;
 	}
 
 	~ScienceOfNotMovable()
@@ -37,27 +37,25 @@ struct ScienceOfNotMovable
 };
 
 // An example of sending some calculations to an executor
-void void_future_node()
+void future_node()
 {
 	hi::CoutScope scope("future_node()");
-	const auto highway = hi::make_self_shared<hi::ConcurrentHighWay<>>();
+    const auto highway = hi::make_self_shared<hi::HighWay>();
+
+    auto science  = std::make_unique<ScienceOfNotMovable>(scope);
+    // Preparation
+    science->science_data_=  std::make_unique<std::string>("research results: ");
 
 	// Future
 	// We wrap into unique_ptr the functor that has the mutex so that it can be moved
-	auto future_node = hi::VoidFutureNode<std::string>::create(
-		std::make_unique<ScienceOfNotMovable>(scope),
-		highway->protector_for_tests_only(),
-		highway);
+    auto future_node = hi::make_self_shared<hi::DefaultNode<int, std::string, decltype(science)>>(std::move(science), highway, 1);
 
 	// Subscribe fo results
-	hi::subscribe(
-		future_node->result_channel(),
-		[&](std::string publication)
-		{
-			scope.print(std::string{"Received future result:"}.append(publication));
-		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
+    auto subscription = hi::create_subscription_for_new_only<std::string>([&](std::string result)
+    {
+       scope.print(std::string{"Received future result:"}.append(result));
+    });
+    future_node->subscribe(subscription, future_node->get_unique_label());
 
 	// Send a signal to start
 	future_node->execute();
@@ -67,77 +65,77 @@ void void_future_node()
 } // void_future_node()
 
 // An example using the full callback interface
-void void_future_node_full_callback()
+void future_node_show_progress()
 {
-	hi::CoutScope scope("future_node()");
-	const auto highway = hi::make_self_shared<hi::ConcurrentHighWay<>>();
+    hi::CoutScope scope("future_node()");
 
-	hi::ExecutionTree execution_tree;
+    // Result
+    auto result_subscription = hi::create_subscription<std::string>([&](std::string result)
+    {
+            scope.print(result);
+    });
 
-	// Future
-	auto future_node = hi::VoidFutureNode<std::string>::create(
-		[&](hi::IPublisher<std::string> & result_publisher,
-			hi::INode & node,
-			const std::atomic<std::uint32_t> & global_run_id,
-			const std::uint32_t your_run_id)
-		{
-			if (your_run_id != global_run_id)
-				return;
-			scope.print(std::string{"Executed future_node №"}.append(std::to_string(node.node_id())));
-			node.publish_progress_state(true, 99);
-			result_publisher.publish("Scientific discovery: you can publish which ExecutionTree node is currently "
-									 "executing and what % of progress is made");
-		},
-		highway->protector_for_tests_only(),
-		highway,
-		__FILE__,
-		__LINE__,
-		execution_tree.current_executed_node_publisher(),
-		555);
+    const auto highway1 = hi::make_self_shared<hi::HighWay>();
+    highway1->execute(
+    []()
+    {
+                    hi::set_this_thread_name("highway1");
+    },
+    __FILE__,
+            __LINE__);
 
-	// Subscribe for result
-	hi::subscribe(
-		future_node->result_channel(),
-		[&](std::string publication)
-		{
-			scope.print(std::string{"Received future result:"}.append(publication));
-		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
+    const auto highway2 = hi::make_self_shared<hi::HighWay>();
+    highway2->execute(
+    []()
+    {
+                    hi::set_this_thread_name("highway2");
+    },
+    __FILE__,
+            __LINE__);
 
-	// Subscribe for progress
-	execution_tree.current_executed_node_publisher()->subscribe(
-		[&](hi::CurrentExecutedNode progress)
-		{
-			std::string str{"execution_tree: "};
-			if (progress.in_progress_)
-			{
-				str.append("now executing node №");
-			}
-			else
-			{
-				str.append("finished node №");
-			}
-			str.append(std::to_string(progress.node_id_))
-				.append(", progress achived: ")
-				.append(std::to_string(progress.achieved_progress_));
+    hi::ExecutionTreeWithProgressPublisher execution_tree{highway1};
 
-			scope.print(std::move(str));
-		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
+    {
+        // Future
+        auto future_node = hi::ExecutionTreeDefaultNodeFabric<int, std::string>::create
+        (
+            [&, progress = std::int32_t{0}](hi::LabeledPublication<int>, hi::INode& node, const std::atomic<bool>& keep_execution) mutable
+            {
+                scope.print("future_node started on " + hi::get_this_thread_name());
+                while(keep_execution)
+                {
+                    progress += 1;
+                    node.publish_progress_state(progress);
+                    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+                }
+                return std::string{"result progress = "}.append(std::to_string(progress));
+            }, execution_tree, hi::make_weak_ptr(highway2), execution_tree.generate_node_id()
+        );
 
-	// Send a signal to start
-	future_node->execute();
+        future_node->subscribe(result_subscription);
+    } // scope
 
-	highway->flush_tasks();
-	highway->destroy();
-} // void_future_node_full_callback()
+    auto subscriber = execution_tree.subscribe_channel()->subscribe(
+     [&](hi::NodeProgress progress)
+        {
+            scope.print("progress received on " + hi::get_this_thread_name());
+            scope.print(std::string{"node №"} + std::to_string(progress.node_id_) + " achived progress: " + std::to_string(progress.achieved_progress_)) ;
+        }, hi::make_weak_ptr(highway1), __FILE__, __LINE__);
+
+
+    // Send a signal to start
+    execution_tree.execute();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+    highway2->destroy();
+    highway1->destroy();
+} // future_node_show_progress()
 
 int main(int /* argc */, char ** /* argv */)
 {
-	void_future_node();
-	void_future_node_full_callback();
+    future_node();
+    future_node_show_progress();
 
 	std::cout << "Tests finished" << std::endl;
 

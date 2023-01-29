@@ -15,6 +15,10 @@
 namespace hi
 {
 
+// ShowType<decltype(t)> xType;
+template<typename T>
+    class ShowType;
+
 template <typename Fun, typename Protector, typename... Args>
 void safe_invoke_void(Fun && fun, Protector & protector, Args &&... args)
 {

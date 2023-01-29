@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef MAKE_SELF_SHARED_H
-#define MAKE_SELF_SHARED_H
+#ifndef THREADS_HIGHWAYS_TOOLS_MAKE_SELF_SHARED_H
+#define THREADS_HIGHWAYS_TOOLS_MAKE_SELF_SHARED_H
 
 #include <memory>
 
@@ -53,4 +53,4 @@ template <typename T, typename... Args>
 
 } // namespace hi
 
-#endif // MAKE_SELF_SHARED_H
+#endif // THREADS_HIGHWAYS_TOOLS_MAKE_SELF_SHARED_H

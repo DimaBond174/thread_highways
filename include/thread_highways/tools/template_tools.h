@@ -1,0 +1,9 @@
+#ifndef THREADS_HIGHWAYS_TEMPLATE_TOOLS_H
+#define THREADS_HIGHWAYS_TEMPLATE_TOOLS_H
+
+namespace hi {
+
+
+} // namespace hi
+
+#endif // THREADS_HIGHWAYS_TEMPLATE_TOOLS_H

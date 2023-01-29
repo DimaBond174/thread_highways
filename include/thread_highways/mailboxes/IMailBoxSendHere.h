@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef IMAILBOX_H
-#define IMAILBOX_H
+#ifndef THREADS_HIGHWAYS_MAILBOXES_IMAIL_BOX_SEND_HERE_H
+#define THREADS_HIGHWAYS_MAILBOXES_IMAIL_BOX_SEND_HERE_H
 
 #include <cstdint>
 
@@ -26,4 +26,4 @@ struct IMailBoxSendHere
 
 } // namespace hi
 
-#endif // IMAILBOX_H
+#endif // THREADS_HIGHWAYS_MAILBOXES_IMAIL_BOX_SEND_HERE_H

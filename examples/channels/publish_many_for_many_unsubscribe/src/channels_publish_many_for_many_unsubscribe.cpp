@@ -8,32 +8,27 @@ using namespace std::chrono_literals;
 int main(int /* argc */, char ** /* argv */)
 {
 	auto scope = std::make_shared<hi::CoutScope>("channels_publish_many_for_many_unsubscribe");
-	auto highway = hi::make_self_shared<hi::ConcurrentHighWay<>>();
-	auto highway_mailbox = highway->mailbox();
-
-	auto publisher = hi::make_self_shared<hi::PublishManyForManyCanUnSubscribe<std::string>>();
+        auto highway = hi::make_self_shared<hi::HighWay>();
+        auto publisher = hi::make_self_shared<hi::HighWayPublisher<std::string>>(highway);
 	auto channel = publisher->subscribe_channel();
 
 	struct SelfProtectedSubscriber
 	{
 		SelfProtectedSubscriber(
-			std::weak_ptr<SelfProtectedSubscriber> self_weak,
 			const std::uint32_t id,
 			std::shared_ptr<hi::CoutScope> scope,
-			const hi::ISubscribeHerePtr<std::string> & channel,
-			hi::IHighWayMailBoxPtr highway_mailbox)
+                        const hi::ISubscribeHerePtr<std::string> & channel)
 			: id_{id}
 			, scope_{std::move(scope)}
+                        , subscription_{
+                              channel->subscribe([id = id_, scope = scope_](std::string publication)
+                {
+                        scope->print(std::to_string(id).append(") subscriber received: ").append(publication));
+                }, false)
+                }
 		{
-			hi::subscribe(
-				channel,
-				[id = id_, scope = scope_](std::string publication)
-				{
-					scope->print(std::to_string(id).append(") subscriber received: ").append(publication));
-				},
-				std::move(self_weak),
-				std::move(highway_mailbox));
 		}
+
 		~SelfProtectedSubscriber()
 		{
 			scope_->print(std::to_string(id_).append(") subscriber destroyed.\n\n"));
@@ -45,6 +40,7 @@ int main(int /* argc */, char ** /* argv */)
 
 		const std::uint32_t id_;
 		const std::shared_ptr<hi::CoutScope> scope_;
+                const std::shared_ptr<hi::ISubscription<std::string>> subscription_;
 	};
 
 	const auto fun = [&](std::uint32_t id)
@@ -67,11 +63,11 @@ int main(int /* argc */, char ** /* argv */)
 	}
 
 	// Long Life Subscriber
-	auto subscriber1 = hi::make_self_shared<SelfProtectedSubscriber>(1, scope, channel, highway_mailbox);
+        SelfProtectedSubscriber subscriber1{1, scope, channel};
 
 	{
 		// Short Life Subscriber
-		auto subscriber2 = hi::make_self_shared<SelfProtectedSubscriber>(2, scope, channel, highway_mailbox);
+                SelfProtectedSubscriber subscriber2{2, scope, channel};
 		std::this_thread::sleep_for(100ms);
 	}
 

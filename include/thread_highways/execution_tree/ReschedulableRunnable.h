@@ -5,15 +5,13 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef ReschedulableRunnable_H
-#define ReschedulableRunnable_H
+#ifndef THREADS_HIGHWAYS_EXECUTION_TREE_RESCHEDULABLERUNNABLE_H
+#define THREADS_HIGHWAYS_EXECUTION_TREE_RESCHEDULABLERUNNABLE_H
 
+#include <thread_highways/execution_tree/Schedule.h>
 #include <thread_highways/tools/safe_invoke.h>
 
-#include <atomic>
 #include <cassert>
-#include <chrono>
-#include <string>
 
 namespace hi
 {
@@ -21,33 +19,12 @@ namespace hi
 /*
  * A task for execution on highway.
  * This task can reschedule itself.
- *
- * For single threaded use only
+ * Может использоваться для высокоприоритетных задач:
+ * проверка необходимости запуска происходит на каждом такте хайвея
  */
 class ReschedulableRunnable
 {
 public:
-	// Schedule Management Structure
-	struct Schedule
-	{
-		// true == should be rescheduled. Automatically set to false before each run
-		bool rechedule_{false};
-
-		// Point in time after which the task should be launched for execution
-		std::chrono::steady_clock::time_point next_execution_time_{}; // == run if less then now()
-
-		/**
-		 * Auxiliary method for setting launch after a specified period
-		 *
-		 * @param ms - will start after now() + ms milliseconds
-		 */
-		void schedule_launch_in(const std::chrono::milliseconds ms)
-		{
-			rechedule_ = true;
-			next_execution_time_ = std::chrono::steady_clock::now() + ms;
-		}
-	};
-
 	/**
 	 * Creating a template task without a protector
 	 *
@@ -57,7 +34,7 @@ public:
 	 * @note filename and line will used for error and freeze logging
 	 */
 	template <typename R>
-	static ReschedulableRunnable create(R && r, std::string filename, unsigned int line)
+    static ReschedulableRunnable create(R && r, std::chrono::steady_clock::time_point next_execution_time, const char* filename, unsigned int line)
 	{
 		struct RunnableHolderImpl : public RunnableHolder
 		{
@@ -76,18 +53,12 @@ public:
 			 * @note using of global_run_id and your_run_id is optional
 			 */
 			void operator()(
-				Schedule & schedule,
-				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
-				[[maybe_unused]] const std::uint32_t your_run_id) override
+                Schedule& schedule, [[maybe_unused]] const std::atomic<bool>& keep_execution) override
 			{
-				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+                if constexpr (
+                    std::is_invocable_v<R, Schedule &, const std::atomic<bool>&>)
 				{
-					r_(LaunchParameters{schedule, global_run_id, your_run_id});
-				}
-				else if constexpr (
-					std::is_invocable_v<R, Schedule &, const std::atomic<std::uint32_t> &, const std::uint32_t>)
-				{
-					r_(schedule, global_run_id, your_run_id);
+                    r_(schedule, keep_execution);
 				}
 				else if constexpr (std::is_invocable_v<R, Schedule &>)
 				{
@@ -96,17 +67,9 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && r = *r_;
-					if constexpr (std::is_invocable_v<decltype(r), LaunchParameters>)
+                    if constexpr (std::is_invocable_v<decltype(r), Schedule &, const std::atomic<bool>&>)
 					{
-						r(LaunchParameters{schedule, global_run_id, your_run_id});
-					}
-					else if constexpr (std::is_invocable_v<
-										   decltype(r),
-										   Schedule &,
-										   const std::atomic<std::uint32_t> &,
-										   const std::uint32_t>)
-					{
-						r(schedule, global_run_id, your_run_id);
+                        r(schedule, keep_execution);
 					}
 					else
 					{
@@ -121,7 +84,7 @@ public:
 			}
 			R r_;
 		};
-		return ReschedulableRunnable{new RunnableHolderImpl{std::move(r)}, std::move(filename), line};
+        return ReschedulableRunnable{new RunnableHolderImpl{std::move(r)}, next_execution_time, filename, line};
 	}
 
 	/**
@@ -135,7 +98,7 @@ public:
 	 * @note filename and line will used for error and freeze logging
 	 */
 	template <typename R, typename P>
-	static ReschedulableRunnable create(R && runnable, P protector, std::string filename, unsigned int line)
+    static ReschedulableRunnable create(R && runnable, P protector, std::chrono::steady_clock::time_point next_execution_time, const char* filename, unsigned int line)
 	{
 		struct RunnableProtectedHolderImpl : public RunnableHolder
 		{
@@ -155,18 +118,12 @@ public:
 			 * @note using of global_run_id and your_run_id is optional
 			 */
 			void operator()(
-				Schedule & schedule,
-				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
-				[[maybe_unused]] const std::uint32_t your_run_id) override
+                Schedule & schedule, [[maybe_unused]] const std::atomic<bool>& keep_execution) override
 			{
-				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+                if constexpr (
+                    std::is_invocable_v<R, Schedule &, const std::atomic<bool>&>)
 				{
-					safe_invoke_void(runnable_, protector_, LaunchParameters{schedule, global_run_id, your_run_id});
-				}
-				else if constexpr (
-					std::is_invocable_v<R, Schedule &, const std::atomic<std::uint32_t> &, const std::uint32_t>)
-				{
-					safe_invoke_void(runnable_, protector_, schedule, global_run_id, your_run_id);
+                    safe_invoke_void(runnable_, protector_, schedule, keep_execution);
 				}
 				else if constexpr (std::is_invocable_v<R, Schedule &>)
 				{
@@ -175,16 +132,9 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && r = *runnable_;
-					if constexpr (std::is_invocable_v<decltype(r), LaunchParameters>)
+                    if constexpr (std::is_invocable_v<decltype(r), Schedule&, const std::atomic<bool>& >)
 					{
-						safe_invoke_void(r, protector_, LaunchParameters{schedule, global_run_id, your_run_id});
-					}
-					else if constexpr (std::is_invocable_v<
-										   decltype(r),
-										   const std::atomic<std::uint32_t> &,
-										   const std::uint32_t>)
-					{
-						safe_invoke_void(r, protector_, schedule, global_run_id, your_run_id);
+                        safe_invoke_void(r, protector_, schedule, keep_execution);
 					}
 					else
 					{
@@ -202,7 +152,8 @@ public:
 		};
 		return ReschedulableRunnable{
 			new RunnableProtectedHolderImpl{std::move(runnable), std::move(protector)},
-			std::move(filename),
+            next_execution_time,
+            filename,
 			line};
 	}
 
@@ -231,28 +182,12 @@ public:
 		return *this;
 	}
 
-	/**
-	 * @brief The LaunchParameters struct
-	 * The structure groups all incoming parameters for convenience.
-	 * This is convenient because with an increase in the number of
-	 * incoming parameters, you will not have to make changes to previously developed callbacks.
-	 */
-	struct LaunchParameters
+    void run(const std::atomic<bool>& keep_run)
 	{
-		// Schedule Management Structure
-		const std::reference_wrapper<Schedule> schedule_;
-		// identifier with which this highway works now
-		const std::reference_wrapper<const std::atomic<std::uint32_t>> global_run_id_;
-		// your_run_id - identifier with which this highway was running when this task started
-		const std::uint32_t your_run_id_;
-	};
-
-	void run(const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id)
-	{
-		(*runnable_)(schedule_, global_run_id, your_run_id);
+        (*runnable_)(schedule_, keep_run);
 	}
 
-	std::string get_code_filename() const
+    const char* get_code_filename() const
 	{
 		return filename_;
 	}
@@ -273,18 +208,18 @@ private:
 		virtual ~RunnableHolder() = default;
 		virtual void operator()(
 			Schedule & schedule,
-			const std::atomic<std::uint32_t> & global_run_id,
-			const std::uint32_t your_run_id) = 0;
+            const std::atomic<bool>& keep_execution) = 0;
 	};
 
-	ReschedulableRunnable(RunnableHolder * runnable, std::string filename, unsigned int line)
+    ReschedulableRunnable(RunnableHolder * runnable, std::chrono::steady_clock::time_point next_execution_time, const char* filename, unsigned int line)
 		: filename_{std::move(filename)}
 		, line_{line}
 		, runnable_{runnable}
 	{
+        schedule_.next_execution_time_ = next_execution_time;
 	}
 
-	std::string filename_;
+    const char* filename_;
 	unsigned int line_;
 	RunnableHolder * runnable_{nullptr};
 	Schedule schedule_;
@@ -292,4 +227,4 @@ private:
 
 } // namespace hi
 
-#endif // ReschedulableRunnable_H
+#endif // THREADS_HIGHWAYS_EXECUTION_TREE_RESCHEDULABLERUNNABLE_H

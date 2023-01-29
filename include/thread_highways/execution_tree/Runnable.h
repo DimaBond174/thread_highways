@@ -5,14 +5,13 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef RUNNABLE_H
-#define RUNNABLE_H
+#ifndef THREADS_HIGHWAYS_EXECUTION_TREE_RUNNABLE_H
+#define THREADS_HIGHWAYS_EXECUTION_TREE_RUNNABLE_H
 
 #include <thread_highways/tools/safe_invoke.h>
 
 #include <atomic>
 #include <cassert>
-#include <string>
 
 namespace hi
 {
@@ -30,11 +29,11 @@ public:
 	 * @note filename and line will used for error and freeze logging
 	 */
 	template <typename R>
-	static Runnable create(R && r, std::string filename, unsigned int line)
+    static Runnable create(R&& r, const char* filename, unsigned int line)
 	{
 		struct RunnableHolderImpl : public RunnableHolder
 		{
-			RunnableHolderImpl(R && r)
+            RunnableHolderImpl(R&& r)
 				: r_{std::move(r)}
 			{
 			}
@@ -47,17 +46,11 @@ public:
 			 * @note if (global_run_id != your_run_id) then you must stop execution
 			 * @note using of global_run_id and your_run_id is optional
 			 */
-			void operator()(
-				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
-				[[maybe_unused]] const std::uint32_t your_run_id) override
+            void operator()([[maybe_unused]] const std::atomic<bool>& keep_execution) override
 			{
-				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+                if constexpr (std::is_invocable_v<R, const std::atomic<bool>& >)
 				{
-					r_(LaunchParameters{global_run_id, your_run_id});
-				}
-				else if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
-				{
-					r_(global_run_id, your_run_id);
+                    r_(keep_execution);
 				}
 				else if constexpr (std::is_invocable_v<R>)
 				{
@@ -66,27 +59,19 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && r = *r_;
-					if constexpr (std::is_invocable_v<decltype(r), LaunchParameters>)
+                    if constexpr (std::is_invocable_v<decltype(r), const std::atomic<bool>&>)
 					{
-						r(LaunchParameters{global_run_id, your_run_id});
-					}
-					else if constexpr (std::is_invocable_v<
-										   decltype(r),
-										   const std::atomic<std::uint32_t> &,
-										   const std::uint32_t>)
-					{
-						r(global_run_id, your_run_id);
-					}
-					else
-					{
+                        r(keep_execution);
+                    } else {
 						r();
 					}
 				}
 				else
-				{
-					// The callback signature must be one of the above
-					assert(false);
-				}
+                {
+                    // The callback signature must be one of the above
+                    // ShowType<R> xType;
+                    assert(false);
+                }
 			}
 
 			R r_;
@@ -105,7 +90,7 @@ public:
 	 * @note filename and line will used for error and freeze logging
 	 */
 	template <typename R, typename P>
-	static Runnable create(R && runnable, P protector, std::string filename, unsigned int line)
+    static Runnable create(R&& runnable, P protector, const char* filename, unsigned int line)
 	{
 		struct RunnableProtectedHolderImpl : public RunnableHolder
 		{
@@ -123,17 +108,11 @@ public:
 			 * @note if (global_run_id != your_run_id) then you must stop execution
 			 * @note using of global_run_id and your_run_id is optional
 			 */
-			void operator()(
-				[[maybe_unused]] const std::atomic<std::uint32_t> & global_run_id,
-				[[maybe_unused]] const std::uint32_t your_run_id) override
+            void operator()([[maybe_unused]] const std::atomic<bool>& keep_execution) override
 			{
-				if constexpr (std::is_invocable_v<R, LaunchParameters>)
+                if constexpr (std::is_invocable_v<R,  const std::atomic<bool>&>)
 				{
-					safe_invoke_void(runnable_, protector_, LaunchParameters{global_run_id, your_run_id});
-				}
-				else if constexpr (std::is_invocable_v<R, const std::atomic<std::uint32_t> &, const std::uint32_t>)
-				{
-					safe_invoke_void(runnable_, protector_, global_run_id, your_run_id);
+                    safe_invoke_void(runnable_, protector_, keep_execution);
 				}
 				else if constexpr (std::is_invocable_v<R>)
 				{
@@ -142,16 +121,9 @@ public:
 				else if constexpr (can_be_dereferenced<R &>::value)
 				{
 					auto && r = *runnable_;
-					if constexpr (std::is_invocable_v<decltype(r), LaunchParameters>)
+                    if constexpr (std::is_invocable_v<decltype(r), const std::atomic<bool>&>)
 					{
-						safe_invoke_void(r, protector_, LaunchParameters{global_run_id, your_run_id});
-					}
-					else if constexpr (std::is_invocable_v<
-										   decltype(r),
-										   const std::atomic<std::uint32_t> &,
-										   const std::uint32_t>)
-					{
-						safe_invoke_void(r, protector_, global_run_id, your_run_id);
+                        safe_invoke_void(r, protector_, keep_execution);
 					}
 					else
 					{
@@ -170,7 +142,7 @@ public:
 		};
 		return Runnable{
 			new RunnableProtectedHolderImpl{std::move(runnable), std::move(protector)},
-			std::move(filename),
+            filename,
 			line};
 	}
 
@@ -199,26 +171,12 @@ public:
 		return *this;
 	}
 
-	/**
-	 * @brief The LaunchParameters struct
-	 * The structure groups all incoming parameters for convenience.
-	 * This is convenient because with an increase in the number of
-	 * incoming parameters, you will not have to make changes to previously developed callbacks.
-	 */
-	struct LaunchParameters
+    void run(const std::atomic<bool>& keep_execution)
 	{
-		// identifier with which this highway works now
-		const std::reference_wrapper<const std::atomic<std::uint32_t>> global_run_id_;
-		// your_run_id - identifier with which this highway was running when this task started
-		const std::uint32_t your_run_id_;
-	};
-
-	void run(const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id)
-	{
-		(*runnable_)(global_run_id, your_run_id);
+        (*runnable_)(keep_execution);
 	}
 
-	std::string get_code_filename() const
+    const char* get_code_filename() const
 	{
 		return filename_;
 	}
@@ -232,21 +190,21 @@ private:
 	struct RunnableHolder
 	{
 		virtual ~RunnableHolder() = default;
-		virtual void operator()(const std::atomic<std::uint32_t> & global_run_id, const std::uint32_t your_run_id) = 0;
+        virtual void operator()(const std::atomic<bool>& keep_execution) = 0;
 	};
 
-	Runnable(RunnableHolder * runnable, std::string filename, unsigned int line)
+    Runnable(RunnableHolder * runnable, const char* filename, unsigned int line)
 		: filename_{std::move(filename)}
 		, line_{line}
 		, runnable_{runnable}
 	{
 	}
 
-	std::string filename_;
+    const char* filename_;
 	unsigned int line_;
 	RunnableHolder * runnable_{nullptr};
 };
 
 } // namespace hi
 
-#endif // RUNNABLE_H
+#endif // THREADS_HIGHWAYS_EXECUTION_TREE_RUNNABLE_H
