@@ -14,120 +14,102 @@ namespace hi
 namespace
 {
 
-using highway_types = ::testing::Types<
-	SerialHighWay<>,
-	SerialHighWayDebug<>,
-	SerialHighWayWithScheduler<>,
-	SingleThreadHighWay<>,
-	SingleThreadHighWayWithScheduler<>,
-	ConcurrentHighWay<>,
-	ConcurrentHighWayDebug<>>;
+struct TestData
+{
+	const std::string_view description_;
+	std::function<Runnable(std::reference_wrapper<std::promise<bool>>)> creator_;
+};
 
-template <class T>
-struct TestRunnableCallbacks : public ::testing::Test
+TestData test_data[] = {
+	TestData{
+		"AllParameters",
+		[](std::reference_wrapper<std::promise<bool>> promise)
+		{
+			return Runnable::create(
+				[promise](const std::atomic<bool> &)
+				{
+					promise.get().set_value(true);
+				},
+				__FILE__,
+				__LINE__);
+		}},
+	TestData{
+		"NoParameters",
+		[](std::reference_wrapper<std::promise<bool>> promise)
+		{
+			return Runnable::create(
+				[promise]()
+				{
+					promise.get().set_value(true);
+				},
+				__FILE__,
+				__LINE__);
+		}},
+	TestData{
+		"FunctorAllParameters",
+		[](std::reference_wrapper<std::promise<bool>> promise)
+		{
+			struct Logic
+			{
+				Logic(std::reference_wrapper<std::promise<bool>> promise)
+					: promise_{promise}
+				{
+				}
+				void operator()(const std::atomic<bool> &)
+				{
+					promise_.get().set_value(true);
+				}
+				std::reference_wrapper<std::promise<bool>> promise_;
+				std::mutex mutex_;
+			};
+			auto logic = std::make_unique<Logic>(promise);
+			return Runnable::create(std::move(logic), __FILE__, __LINE__);
+		}},
+	TestData{
+		"FunctorNoParameters",
+		[](std::reference_wrapper<std::promise<bool>> promise)
+		{
+			struct Logic
+			{
+				Logic(std::reference_wrapper<std::promise<bool>> promise)
+					: promise_{promise}
+				{
+				}
+				void operator()()
+				{
+					promise_.get().set_value(true);
+				}
+				std::reference_wrapper<std::promise<bool>> promise_;
+				std::mutex mutex_;
+			};
+			auto logic = std::make_unique<Logic>(promise);
+			return Runnable::create(std::move(logic), __FILE__, __LINE__);
+		}},
+};
+
+struct RunnableCallbacksTest : public ::testing::TestWithParam<TestData>
 {
 };
-TYPED_TEST_SUITE(TestRunnableCallbacks, highway_types);
 
-TYPED_TEST(TestRunnableCallbacks, RunAndWaitResult)
+INSTANTIATE_TEST_SUITE_P(
+	RunnableCallbacksTestInstance,
+	RunnableCallbacksTest,
+	::testing::ValuesIn(test_data),
+	[](const ::testing::TestParamInfo<TestData> & test_info)
+	{
+		return std::string{test_info.param.description_};
+	});
+
+TEST_P(RunnableCallbacksTest, RunAndWaitResultDirect)
 {
-	const auto highway = hi::make_self_shared<TypeParam>();
+	const auto highway = hi::make_self_shared<HighWay>();
+
 	std::promise<bool> promise;
 	auto future = promise.get_future();
 
-	const auto check = [&]
-	{
-		EXPECT_TRUE(future.get());
-		promise = {};
-		future = promise.get_future();
-	};
-
-	highway->post(
-		[&]()
-		{
-			promise.set_value(true);
-		});
-	check();
-
-	highway->post(
-		[&](Runnable::LaunchParameters)
-		{
-			promise.set_value(true);
-		});
-	check();
-
-	highway->post(
-		[&](const std::atomic<std::uint32_t> &, const std::uint32_t)
-		{
-			promise.set_value(true);
-		});
-	check();
-
-	{
-		struct Fun
-		{
-			Fun(std::reference_wrapper<std::promise<bool>> promise)
-				: promise_{std::move(promise)}
-			{
-			}
-			void operator()()
-			{
-				promise_.get().set_value(true);
-			}
-
-			std::reference_wrapper<std::promise<bool>> promise_;
-		};
-
-		highway->post(Fun{promise});
-		check();
-
-		highway->post(std::make_unique<Fun>(promise));
-		check();
-	}
-
-	{
-		struct Fun
-		{
-			Fun(std::reference_wrapper<std::promise<bool>> promise)
-				: promise_{std::move(promise)}
-			{
-			}
-			void operator()(Runnable::LaunchParameters)
-			{
-				promise_.get().set_value(true);
-			}
-
-			std::reference_wrapper<std::promise<bool>> promise_;
-		};
-
-		highway->post(Fun{promise});
-		check();
-
-		highway->post(std::make_unique<Fun>(promise));
-		check();
-	}
-
-	{
-		struct Fun
-		{
-			Fun(std::reference_wrapper<std::promise<bool>> promise)
-				: promise_{std::move(promise)}
-			{
-			}
-			void operator()(const std::atomic<std::uint32_t> &, const std::uint32_t)
-			{
-				promise_.get().set_value(true);
-			}
-
-			std::reference_wrapper<std::promise<bool>> promise_;
-		};
-
-		highway->post(Fun{promise});
-		check();
-
-		highway->post(std::make_unique<Fun>(promise));
-		check();
-	}
+	const TestData & test_params = GetParam();
+	highway->execute(test_params.creator_(promise));
+	EXPECT_TRUE(future.get());
 
 	highway->destroy();
 }

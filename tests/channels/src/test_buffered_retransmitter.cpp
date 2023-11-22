@@ -19,334 +19,135 @@ namespace hi
 {
 namespace
 {
-using publisher_types = ::testing::Types<
-	PublishOneForMany<std::uint32_t>,
-	PublishOneForManyWithConnectionsNotifier<std::uint32_t>,
-	PublishManyForManyCanUnSubscribe<std::uint32_t>,
-	PublishManyForManyWithConnectionsNotifier<std::uint32_t>,
-	PublishManyForMany<std::uint32_t>,
-	PublishOneForMany<std::string>,
-	PublishOneForManyWithConnectionsNotifier<std::string>,
-	PublishManyForManyCanUnSubscribe<std::string>,
-	PublishManyForManyWithConnectionsNotifier<std::string>,
-	PublishManyForMany<std::string>>;
 
-template <class T>
-struct TestBufferedRetransmitter : public ::testing::Test
+TEST(ControlTransmittedData, StickyPublisherShouldPassTheLastMessageToNewSubscriptions)
 {
-};
-TYPED_TEST_SUITE(TestBufferedRetransmitter, publisher_types);
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
+	auto publisher = hi::make_self_shared<hi::HighWayStickyPublisher<std::uint32_t>>(highway.object_);
+	auto subscribe_channel = publisher->subscribe_channel();
+	std::atomic<std::uint32_t> res{0};
 
-template <
-	class From,
-	class To,
-	typename std::enable_if<std::is_same_v<To, std::string> && !std::is_same_v<From, std::string>, bool>::type = true>
-To to_target_type(From val)
-{
-	return std::to_string(val);
-}
-
-template <class From, class To, typename std::enable_if<!std::is_same_v<To, std::string>, bool>::type = true>
-To to_target_type(From val)
-{
-	return val;
-}
-
-template <
-	class From,
-	class To,
-	typename std::enable_if<std::is_same_v<To, std::string> && std::is_same_v<From, std::string>, bool>::type = true>
-To to_target_type(From val)
-{
-	return val;
-}
-
-/*
- Тест простой доставки публикации подписчикам:
- - без отправки буфферизированного значения новым подписчикам (resend_to_just_connected = false)
- - без фильтрации одинаковых значений (send_new_only = false)
-*/
-TYPED_TEST(TestBufferedRetransmitter, BufferedSend)
-{
-	std::string result;
-	std::mutex result_protector;
-	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
-	const std::string expected_result{"1233345555567"};
-
-	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
-
-	auto publisher = hi::make_self_shared<TypeParam>();
-	auto buffered_retransmitter =
-		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, false, false>>(
-			publisher->subscribe_channel(),
-			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
-
-	hi::subscribe(
-		*buffered_retransmitter->subscribe_channel(),
-		[&](typename TypeParam::PublicationType message)
+	auto subscription = subscribe_channel->subscribe(
+		[&](std::uint32_t publication)
 		{
-			std::lock_guard lg{result_protector};
-			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+			res = publication;
 		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
+		false);
 
-	for (auto && it : data)
-	{
-		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
-	}
+	highway.object_->flush_tasks();
+	EXPECT_EQ(res, 0);
 
-	highway->flush_tasks();
-	{
-		std::lock_guard lg{result_protector};
-		EXPECT_EQ(expected_result, result);
-	}
+	publisher->publish(12345);
+	highway.object_->flush_tasks();
+	EXPECT_EQ(res, 12345);
 
-	highway->destroy();
+	res = 0;
+	highway.object_->flush_tasks();
+	EXPECT_EQ(res, 0);
+
+	// New subscriber
+	auto subscription2 = subscribe_channel->subscribe(
+		[&](std::uint32_t publication)
+		{
+			res = publication;
+		},
+		false);
+
+	// Should receive last publication
+	highway.object_->flush_tasks();
+	EXPECT_EQ(res, 12345);
 }
 
-TYPED_TEST(TestBufferedRetransmitter, BufferedSend_DirectSend)
+TEST(ControlTransmittedData, SubscriptionShouldBeAbleToFilterDuplicates)
 {
-	std::string result;
-	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
-	const std::string expected_result{"1233345555567"};
-
-	auto publisher = hi::make_self_shared<TypeParam>();
-	auto buffered_retransmitter =
-		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, false, false>>(
-			publisher->subscribe_channel(),
-			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
-
-	hi::subscribe(
-		*buffered_retransmitter->subscribe_channel(),
-		[&](typename TypeParam::PublicationType message)
+	std::uint32_t res{0};
+	hi::PublishManyForOne<std::uint32_t> publisher{
+		[&](std::uint32_t publication)
 		{
-			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+			res = publication;
 		},
-		std::weak_ptr(publisher));
+		true // for_new_only
+	};
 
-	for (auto && it : data)
-	{
-		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
-	}
+	publisher.publish(12345);
+	EXPECT_EQ(res, 12345);
 
-	EXPECT_EQ(expected_result, result);
+	res = 0;
+	publisher.publish(12345);
+	EXPECT_EQ(res, 0);
 }
 
-/*
- Тест доставки публикации подписчикам:
- - c отправкой буфферизированного значения новым подписчикам (resend_to_just_connected = true)
- - без фильтрации одинаковых значений (send_new_only = false)
-*/
-TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnected)
+TEST(ControlTransmittedData, SubscriptionShouldBeAbleToNotFilterDuplicates)
 {
-	std::string result;
-	std::mutex result_protector;
-	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
-	const std::string expected_result{"7771233345555567"};
-
-	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
-
-	auto publisher = hi::make_self_shared<TypeParam>();
-	auto buffered_retransmitter =
-		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, true, false>>(
-			publisher->subscribe_channel(),
-			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
-
-	hi::subscribe(
-		*buffered_retransmitter->subscribe_channel(),
-		[&](typename TypeParam::PublicationType message)
+	std::uint32_t res{0};
+	hi::PublishManyForOne<std::uint32_t> publisher{
+		[&](std::uint32_t publication)
 		{
-			std::lock_guard lg{result_protector};
-			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+			res = publication;
 		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
+		false // for_new_only
+	};
 
-	for (auto && it : data)
-	{
-		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
-	}
+	publisher.publish(12345);
+	EXPECT_EQ(res, 12345);
 
-	highway->flush_tasks();
-	{
-		std::lock_guard lg{result_protector};
-		EXPECT_EQ(expected_result, result);
-	}
-
-	highway->destroy();
+	res = 0;
+	publisher.publish(12345);
+	EXPECT_EQ(res, 12345);
 }
 
-TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnected_DirectSend)
+TEST(ControlTransmittedData, HighWaySubscriptionShouldBeAbleToFilterDuplicates)
 {
-	std::string result;
-	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
-	const std::string expected_result{"7771233345555567"};
+	std::atomic<std::uint32_t> res{0};
 
-	auto publisher = hi::make_self_shared<TypeParam>();
-	auto buffered_retransmitter =
-		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, true, false>>(
-			publisher->subscribe_channel(),
-			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
-
-	hi::subscribe(
-		*buffered_retransmitter->subscribe_channel(),
-		[&](typename TypeParam::PublicationType message)
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
+	hi::PublishManyForOne<std::uint32_t> publisher{
+		[&](std::uint32_t publication)
 		{
-			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+			res = publication;
 		},
-		std::weak_ptr(publisher));
+		highway.object_,
+		__FILE__,
+		__LINE__,
+		false,
+		true // for_new_only
+	};
 
-	for (auto && it : data)
-	{
-		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
-	}
+	publisher.publish(12345);
+	highway.object_->flush_tasks();
+	EXPECT_EQ(res, 12345);
 
-	EXPECT_EQ(expected_result, result);
+	res = 0;
+	publisher.publish(12345);
+	highway.object_->flush_tasks();
+	EXPECT_EQ(res, 0);
 }
 
-/*
- Тест доставки публикации подписчикам:
- - без отправки буфферизированного значения новым подписчикам (resend_to_just_connected = false)
- - с фильтрацией одинаковых значений (send_new_only = true)
-*/
-TYPED_TEST(TestBufferedRetransmitter, BufferedSendNewOnly)
+TEST(ControlTransmittedData, HighWaySubscriptionShouldBeAbleToNotFilterDuplicates)
 {
-	std::string result;
-	std::mutex result_protector;
-	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
-	const std::string expected_result{"1234567"};
+	std::atomic<std::uint32_t> res{0};
 
-	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
-
-	auto publisher = hi::make_self_shared<TypeParam>();
-	auto buffered_retransmitter =
-		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, false, true>>(
-			publisher->subscribe_channel(),
-			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
-
-	hi::subscribe(
-		*buffered_retransmitter->subscribe_channel(),
-		[&](typename TypeParam::PublicationType message)
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
+	hi::PublishManyForOne<std::uint32_t> publisher{
+		[&](std::uint32_t publication)
 		{
-			std::lock_guard lg{result_protector};
-			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
+			res = publication;
 		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
+		highway.object_,
+		__FILE__,
+		__LINE__,
+		false,
+		false // for_new_only
+	};
 
-	for (auto && it : data)
-	{
-		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
-	}
+	publisher.publish(12345);
+	highway.object_->flush_tasks();
+	EXPECT_EQ(res, 12345);
 
-	highway->flush_tasks();
-	{
-		std::lock_guard lg{result_protector};
-		EXPECT_EQ(expected_result, result);
-	}
-
-	highway->destroy();
-}
-
-TYPED_TEST(TestBufferedRetransmitter, BufferedSendNewOnly_DirectSend)
-{
-	std::string result;
-	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
-	const std::string expected_result{"1234567"};
-
-	auto publisher = hi::make_self_shared<TypeParam>();
-	auto buffered_retransmitter =
-		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, false, true>>(
-			publisher->subscribe_channel(),
-			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
-
-	hi::subscribe(
-		*buffered_retransmitter->subscribe_channel(),
-		[&](typename TypeParam::PublicationType message)
-		{
-			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		},
-		std::weak_ptr(publisher));
-
-	for (auto && it : data)
-	{
-		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
-	}
-
-	EXPECT_EQ(expected_result, result);
-}
-
-/*
- Тест доставки публикации подписчикам:
- - c отправкой буфферизированного значения новым подписчикам (resend_to_just_connected = true)
- - c фильтрацией одинаковых значений (send_new_only = true)
-*/
-TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnectedNewOnly)
-{
-	std::string result;
-	std::mutex result_protector;
-	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
-	const std::string expected_result{"7771234567"};
-
-	auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
-
-	auto publisher = hi::make_self_shared<TypeParam>();
-	auto buffered_retransmitter =
-		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, true, true>>(
-			publisher->subscribe_channel(),
-			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
-
-	hi::subscribe(
-		*buffered_retransmitter->subscribe_channel(),
-		[&](typename TypeParam::PublicationType message)
-		{
-			std::lock_guard lg{result_protector};
-			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
-
-	for (auto && it : data)
-	{
-		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
-	}
-
-	highway->flush_tasks();
-	{
-		std::lock_guard lg{result_protector};
-		EXPECT_EQ(expected_result, result);
-	}
-
-	highway->destroy();
-}
-
-TYPED_TEST(TestBufferedRetransmitter, BufferedSendResendToJustConnectedNewOnly_DirectSend)
-{
-	std::string result;
-	std::vector<std::uint32_t> data{1, 2, 3, 3, 3, 4, 5, 5, 5, 5, 5, 6, 7};
-	const std::string expected_result{"7771234567"};
-
-	auto publisher = hi::make_self_shared<TypeParam>();
-	auto buffered_retransmitter =
-		hi::make_self_shared<hi::BufferedRetransmitter<typename TypeParam::PublicationType, true, true>>(
-			publisher->subscribe_channel(),
-			to_target_type<std::uint32_t, typename TypeParam::PublicationType>(777));
-
-	hi::subscribe(
-		*buffered_retransmitter->subscribe_channel(),
-		[&](typename TypeParam::PublicationType message)
-		{
-			result.append(to_target_type<typename TypeParam::PublicationType, std::string>(message));
-		},
-		std::weak_ptr(publisher));
-
-	for (auto && it : data)
-	{
-		publisher->publish(to_target_type<decltype(it), typename TypeParam::PublicationType>(it));
-	}
-
-	EXPECT_EQ(expected_result, result);
+	res = 0;
+	publisher.publish(12345);
+	highway.object_->flush_tasks();
+	EXPECT_EQ(res, 12345);
 }
 
 } // namespace

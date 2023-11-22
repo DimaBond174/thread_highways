@@ -8,8 +8,8 @@ using namespace std::chrono_literals;
 int main(int /* argc */, char ** /* argv */)
 {
 	auto scope = std::make_shared<hi::CoutScope>("channels_publish_many_for_many_unsubscribe");
-        auto highway = hi::make_self_shared<hi::HighWay>();
-        auto publisher = hi::make_self_shared<hi::HighWayPublisher<std::string>>(highway);
+	auto highway = hi::make_self_shared<hi::HighWay>();
+	auto publisher = hi::make_self_shared<hi::HighWayPublisher<std::string>>(highway);
 	auto channel = publisher->subscribe_channel();
 
 	struct SelfProtectedSubscriber
@@ -17,15 +17,15 @@ int main(int /* argc */, char ** /* argv */)
 		SelfProtectedSubscriber(
 			const std::uint32_t id,
 			std::shared_ptr<hi::CoutScope> scope,
-                        const hi::ISubscribeHerePtr<std::string> & channel)
+			const hi::ISubscribeHerePtr<std::string> & channel)
 			: id_{id}
 			, scope_{std::move(scope)}
-                        , subscription_{
-                              channel->subscribe([id = id_, scope = scope_](std::string publication)
-                {
-                        scope->print(std::to_string(id).append(") subscriber received: ").append(publication));
-                }, false)
-                }
+			, subscription_{channel->subscribe(
+				  [id = id_, scope = scope_](std::string publication)
+				  {
+					  scope->print(std::to_string(id).append(") subscriber received: ").append(publication));
+				  },
+				  false)}
 		{
 		}
 
@@ -40,7 +40,7 @@ int main(int /* argc */, char ** /* argv */)
 
 		const std::uint32_t id_;
 		const std::shared_ptr<hi::CoutScope> scope_;
-                const std::shared_ptr<hi::ISubscription<std::string>> subscription_;
+		const std::shared_ptr<hi::ISubscription<std::string>> subscription_;
 	};
 
 	const auto fun = [&](std::uint32_t id)
@@ -63,11 +63,11 @@ int main(int /* argc */, char ** /* argv */)
 	}
 
 	// Long Life Subscriber
-        SelfProtectedSubscriber subscriber1{1, scope, channel};
+	SelfProtectedSubscriber subscriber1{1, scope, channel};
 
 	{
 		// Short Life Subscriber
-                SelfProtectedSubscriber subscriber2{2, scope, channel};
+		SelfProtectedSubscriber subscriber2{2, scope, channel};
 		std::this_thread::sleep_for(100ms);
 	}
 

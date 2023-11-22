@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef RAIIthread_H
-#define RAIIthread_H
+#ifndef THREADS_HIGHWAYS_TOOLS_RAIITHREAD_H
+#define THREADS_HIGHWAYS_TOOLS_RAIITHREAD_H
 
 #include <memory>
 #include <mutex>
@@ -111,4 +111,4 @@ private:
 
 } // namespace hi
 
-#endif // RAIIthread_H
+#endif // THREADS_HIGHWAYS_TOOLS_RAIITHREAD_H

@@ -75,14 +75,11 @@ bool test_highway_channel_block_on_wait_holder(const std::uint32_t burden)
 {
 	std::promise<bool> complete_promise;
 	auto complete_future = complete_promise.get_future();
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::uint32_t>>();
 
-	hi::RAIIdestroy highway{hi::make_self_shared<hi::SingleThreadHighWay<>>()};
-	auto subscribe_channel = publisher->subscribe_channel();
-
-	hi::subscribe(
-		subscribe_channel,
+	auto subsciption = publisher->subscribe_channel()->subscribe(
 		[&](std::uint32_t publication)
 		{
 			if (publication == burden)
@@ -91,8 +88,10 @@ bool test_highway_channel_block_on_wait_holder(const std::uint32_t burden)
 				return;
 			}
 		},
-		highway.object_->protector_for_tests_only(),
-		highway.object_->mailbox(),
+		highway.object_,
+		__FILE__,
+		__LINE__,
+		false,
 		false);
 
 	for (std::uint32_t msg = 0; msg <= burden; ++msg)
@@ -107,15 +106,12 @@ bool test_highway_channel_not_block(const std::uint32_t burden)
 {
 	std::promise<bool> complete_promise;
 	auto complete_future = complete_promise.get_future();
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
+	highway.object_->set_capacity(burden);
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::uint32_t>>();
 
-	hi::RAIIdestroy highway{hi::make_self_shared<hi::SingleThreadHighWay<>>()};
-	highway.object_->set_capacity(burden);
-	auto subscribe_channel = publisher->subscribe_channel();
-
-	hi::subscribe(
-		subscribe_channel,
+	auto subsciption = publisher->subscribe_channel()->subscribe(
 		[&](std::uint32_t publication)
 		{
 			if (publication == burden)
@@ -124,8 +120,9 @@ bool test_highway_channel_not_block(const std::uint32_t burden)
 				return;
 			}
 		},
-		highway.object_->protector_for_tests_only(),
-		highway.object_->mailbox());
+		highway.object_,
+		__FILE__,
+		__LINE__);
 
 	for (std::uint32_t msg = 0; msg <= burden; ++msg)
 	{
@@ -141,11 +138,7 @@ bool test_highway_channel_direct_send(const std::uint32_t burden)
 	auto complete_future = complete_promise.get_future();
 
 	auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::uint32_t>>();
-	auto subscribe_channel = publisher->subscribe_channel();
-
-	auto subscriber_protector = std::make_shared<bool>();
-	hi::subscribe(
-		subscribe_channel,
+	auto subsciption = publisher->subscribe_channel()->subscribe(
 		[&](std::uint32_t publication)
 		{
 			if (publication == burden)
@@ -154,7 +147,7 @@ bool test_highway_channel_direct_send(const std::uint32_t burden)
 				return;
 			}
 		},
-		std::weak_ptr(subscriber_protector));
+		false);
 
 	for (std::uint32_t msg = 0; msg <= burden; ++msg)
 	{

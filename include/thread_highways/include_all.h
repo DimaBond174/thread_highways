@@ -10,20 +10,24 @@
 
 //! All includes
 
-#include <thread_highways/channels/HighWayPublisher.h>
-#include <thread_highways/channels/HighWayStickyPublisher.h>
-#include <thread_highways/channels/HighWayStickyPublisherWithConnectionsNotifier.h>
-#include <thread_highways/channels/PublishManyForOne.h>
-#include <thread_highways/channels/PublishOneForMany.h>
+#include <thread_highways/channels/highway_publisher.h>
+#include <thread_highways/channels/highway_sticky_publisher.h>
+#include <thread_highways/channels/highway_sticky_publisher_with_connections_notifier.h>
+#include <thread_highways/channels/publish_many_for_one.h>
+#include <thread_highways/channels/publish_one_for_many.h>
 
-#include <thread_highways/execution_tree/DefaultExecutionTree.h>
-#include <thread_highways/execution_tree/IExecutionTree.h>
-#include <thread_highways/execution_tree/ReschedulableRunnable.h>
-#include <thread_highways/execution_tree/ResultNode.h>
-#include <thread_highways/execution_tree/Runnable.h>
+#include <thread_highways/execution_tree/default_execution_tree.h>
+#include <thread_highways/execution_tree/future.h>
+#include <thread_highways/execution_tree/i_execution_tree.h>
+#include <thread_highways/execution_tree/reschedulable_runnable.h>
+#include <thread_highways/execution_tree/result_node.h>
+#include <thread_highways/execution_tree/runnable.h>
 
-#include <thread_highways/highways/HighWay.h>
-#include <thread_highways/highways/MultiThreadedTaskProcessingPlant.h>
+#include <thread_highways/highways/highway.h>
+#include <thread_highways/highways/highways_manager.h>
+#include <thread_highways/highways/multi_threaded_task_processing_plant.h>
+
+#include <thread_highways/routers/high_way_router.h>
 
 #include <thread_highways/tools/small_tools.h>
 #include <thread_highways/tools/thread_tools.h>

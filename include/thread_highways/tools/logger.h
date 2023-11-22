@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef THREADS_HIGHWAYS_TOOLS_LOGGER_H
+#define THREADS_HIGHWAYS_TOOLS_LOGGER_H
 
 #include <chrono>
 #include <cstdint>
@@ -185,4 +185,4 @@ private:
 
 } // namespace hi
 
-#endif // LOGGER_H
+#endif // THREADS_HIGHWAYS_TOOLS_LOGGER_H

@@ -1,3 +1,4 @@
 add_subdirectory(callbacks)
+add_subdirectory(future)
 add_subdirectory(self-developing_execution_tree)
 add_subdirectory(simple_logic_nodes)

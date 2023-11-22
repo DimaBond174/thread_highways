@@ -19,14 +19,7 @@
 namespace hi
 {
 
-using highway_types = ::testing::Types<
-	SerialHighWay<>,
-	SerialHighWayDebug<>,
-	SerialHighWayWithScheduler<>,
-	SingleThreadHighWay<>,
-	SingleThreadHighWayWithScheduler<>,
-	ConcurrentHighWay<>,
-	ConcurrentHighWayDebug<>>;
+using highway_types = ::testing::Types<HighWay, MultiThreadedTaskProcessingPlant>;
 
 template <class T>
 struct TestLackOfHolders : public ::testing::Test
@@ -81,9 +74,6 @@ TYPED_TEST(TestLackOfHolders, TwoHighwaysWithRunnables)
 	highway1->set_capacity(2);
 	highway2->set_capacity(2);
 
-	auto highway1_mailbox = highway1->mailbox();
-	auto highway2_mailbox = highway2->mailbox();
-
 	// must run on highway1
 	std::function<void(std::unique_ptr<Message> &&)> resender1;
 	// must run on highway2
@@ -91,48 +81,38 @@ TYPED_TEST(TestLackOfHolders, TwoHighwaysWithRunnables)
 
 	resender1 = [&](std::unique_ptr<Message> && message)
 	{
-		EXPECT_TRUE(highway1->current_execution_on_this_highway());
 		message->message_loop_id_++;
-		highway2_mailbox->send_may_blocked(hi::Runnable::create(
-			[&, message = std::move(message)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
+		highway2->execute(
+			[&, message = std::move(message)]() mutable
 			{
 				resender2(std::move(message));
-			},
-			__FILE__,
-			__LINE__));
+			});
 	};
 
 	resender2 = [&](std::unique_ptr<Message> && message)
 	{
-		EXPECT_TRUE(highway2->current_execution_on_this_highway());
 		message->message_loop_id_++;
-		highway1_mailbox->send_may_blocked(hi::Runnable::create(
-			[&, message = std::move(message)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
+		highway1->execute(
+			[&, message = std::move(message)]() mutable
 			{
 				// slow worker
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 				resender1(std::move(message));
-			},
-			__FILE__,
-			__LINE__));
+			});
 	};
 
 	// Запускаем цикл
-	highway1_mailbox->send_may_blocked(hi::Runnable::create(
-		[&, message = std::move(message1)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
+	highway1->execute(
+		[&, message = std::move(message1)]() mutable
 		{
 			resender1(std::move(message));
-		},
-		__FILE__,
-		__LINE__));
+		});
 
-	highway2_mailbox->send_may_blocked(hi::Runnable::create(
-		[&, message = std::move(message2)](const std::atomic<std::uint32_t> &, const std::uint32_t) mutable
+	highway2->execute(
+		[&, message = std::move(message2)]() mutable
 		{
 			resender2(std::move(message));
-		},
-		__FILE__,
-		__LINE__));
+		});
 
 	// Если произойдёт дедлок, то это ожидание будет вечным
 	std::uint32_t expected_count{100};
@@ -146,7 +126,7 @@ TYPED_TEST(TestLackOfHolders, TwoHighwaysWithRunnables)
 	highway2->destroy();
 }
 
-TYPED_TEST(TestLackOfHolders, TwoHighwaysWithPublishers)
+TEST(TestLackOfHolders, TwoHighwaysWithPublishers)
 {
 	// Будем проверять что сообщение прошло через хайвеи N раз
 	std::atomic<std::uint32_t> message1_loop_id{0};
@@ -174,8 +154,8 @@ TYPED_TEST(TestLackOfHolders, TwoHighwaysWithPublishers)
 	EXPECT_EQ(1, message1_loop_id);
 	EXPECT_EQ(1, message2_loop_id);
 
-	auto highway1 = hi::make_self_shared<TypeParam>();
-	auto highway2 = hi::make_self_shared<TypeParam>();
+	auto highway1 = hi::make_self_shared<HighWay>();
+	auto highway2 = hi::make_self_shared<HighWay>();
 
 	/*
 	 * На каждый хайвей будет запущен Runnable который пошлёт сообщение на другой хайвей,
@@ -185,46 +165,39 @@ TYPED_TEST(TestLackOfHolders, TwoHighwaysWithPublishers)
 	highway1->set_capacity(2);
 	highway2->set_capacity(2);
 
-	publisher1->subscribe(
+	const auto subscription2 = publisher1->subscribe_channel()->subscribe(
 		[&](std::shared_ptr<Message> message)
 		{
-			EXPECT_TRUE(highway2->current_execution_on_this_highway());
 			message->message_loop_id_++;
 			publisher2->publish(std::move(message));
 		},
-		highway2->protector_for_tests_only(),
-		highway2->mailbox(),
-		false,
+		highway2,
 		__FILE__,
 		__LINE__);
 
-	publisher2->subscribe(
+	const auto subscription1 = publisher2->subscribe_channel()->subscribe(
 		[&](std::shared_ptr<Message> message)
 		{
-			EXPECT_TRUE(highway1->current_execution_on_this_highway());
 			std::this_thread::sleep_for(std::chrono::milliseconds{10});
 			message->message_loop_id_++;
 			publisher1->publish(std::move(message));
 		},
-		highway1->protector_for_tests_only(),
-		highway1->mailbox(),
-		false,
+		highway1,
 		__FILE__,
 		__LINE__);
 
 	// Запускаем цикл
-	hi::execute(
+	highway1->execute(
 		[&]()
 		{
 			publisher1->publish(std::move(message1));
-		},
-		highway1);
-	hi::execute(
+		});
+
+	highway2->execute(
 		[&]
 		{
 			publisher2->publish(std::move(message2));
-		},
-		highway2);
+		});
 
 	// Если произойдёт дедлок, то это ожидание будет вечным
 	std::uint32_t expected_count{100};

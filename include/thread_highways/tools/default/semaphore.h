@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef SEMAPHORE_H
-#define SEMAPHORE_H
+#ifndef THREADS_HIGHWAYS_TOOLS_DEFAULT_SEMAPHORE_H
+#define THREADS_HIGHWAYS_TOOLS_DEFAULT_SEMAPHORE_H
 
 #include <atomic>
 #include <chrono>
@@ -125,4 +125,4 @@ private:
 
 } // namespace hi
 
-#endif // SEMAPHORE_H
+#endif // THREADS_HIGHWAYS_TOOLS_DEFAULT_SEMAPHORE_H

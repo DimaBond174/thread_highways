@@ -1,3 +1,5 @@
 add_subdirectory(aggregating)
 add_subdirectory(execution_tree_for_loop)
+add_subdirectory(future)
+add_subdirectory(neural_network)
 add_subdirectory(simple)

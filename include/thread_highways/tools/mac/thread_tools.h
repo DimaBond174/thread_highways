@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef APPLE_THREADS_H
-#define APPLE_THREADS_H
+#ifndef THREADS_HIGHWAYS_TOOLS_MAC_TREAD_TOOLS_H
+#define THREADS_HIGHWAYS_TOOLS_MAC_TREAD_TOOLS_H
 
 #include <algorithm>
 #include <string>
@@ -36,4 +36,4 @@ std::string get_this_thread_name()
 } // namespace
 } // namespace hi
 
-#endif // APPLE_THREADS_H
+#endif // THREADS_HIGHWAYS_TOOLS_MAC_TREAD_TOOLS_H

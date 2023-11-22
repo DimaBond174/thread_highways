@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef STACK_H
-#define STACK_H
+#ifndef THREADS_HIGHWAYS_TOOLS_STACK_H
+#define THREADS_HIGHWAYS_TOOLS_STACK_H
 
 #include <atomic>
 #include <cstdint>
@@ -35,15 +35,15 @@ template <typename Holder>
 class SingleThreadStack
 {
 public:
-    [[nodiscard]] bool empty() const noexcept
+	[[nodiscard]] bool empty() const noexcept
 	{
-        return !head_;
+		return !head_;
 	}
 
-    [[nodiscard]] bool not_empty() const noexcept
-    {
-        return !!head_;
-    }
+	[[nodiscard]] bool not_empty() const noexcept
+	{
+		return !!head_;
+	}
 
 	void push(Holder * node) noexcept
 	{
@@ -375,4 +375,4 @@ private:
 
 } // namespace hi
 
-#endif // STACK_H
+#endif // THREADS_HIGHWAYS_TOOLS_STACK_H

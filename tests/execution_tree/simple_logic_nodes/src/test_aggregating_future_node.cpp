@@ -17,191 +17,209 @@
 namespace hi
 {
 
-TEST(TestAggregatingFutureNode, AggregateSum)
+TEST(TestAggregatingFutureNode, AggregateSumDirect)
 {
-	RAIIdestroy highway{hi::make_self_shared<hi::SerialHighWay<>>()};
+	RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
+	const std::int32_t expected_operands_count{10};
 
-	struct AggregatingBundle
+	class AggregatingBundle
 	{
-		// no need in mutex because of hi::SerialHighWay
-		std::map<std::uint32_t, double> operands_map_;
-	};
-
-	const std::uint32_t expected_operands_count{10};
-	auto aggregating_future = AggregatingFutureNode<double, AggregatingBundle, double>::create(
-		[expected_operands_count](
-			const std::uint32_t operand_id,
-			const double operand_value,
-			AggregatingBundle & aggregating_bundle,
-			hi::IPublisher<double> & result_publisher,
-			const std::uint32_t operands_count)
+	public:
+		void operator()(double publication, const std::int32_t label, hi::Publisher<double> & publisher)
 		{
-			aggregating_bundle.operands_map_.try_emplace(operand_id, operand_value);
-			if (static_cast<std::uint32_t>(aggregating_bundle.operands_map_.size()) == operands_count)
+			operands_map_.try_emplace(label, publication);
+			if (static_cast<std::int32_t>(operands_map_.size()) == expected_operands_count)
 			{
-				EXPECT_EQ(expected_operands_count, operands_count);
 				auto summ = std::accumulate(
-					aggregating_bundle.operands_map_.begin(),
-					aggregating_bundle.operands_map_.end(),
+					operands_map_.begin(),
+					operands_map_.end(),
 					0.0,
-					[](const double previous, const std::pair<const std::uint32_t, double> & p)
+					[](const double previous, const std::pair<const std::int32_t, double> & p)
 					{
 						return previous + p.second;
 					});
-				result_publisher.publish(summ);
+				publisher.publish_direct(summ);
 			}
-		},
-		highway.object_->protector_for_tests_only(),
-		highway.object_);
-
-	struct SelfProtectedChecker
-	{
-		SelfProtectedChecker(
-			std::weak_ptr<SelfProtectedChecker> self_weak,
-			const std::shared_ptr<AggregatingFutureNode<double, AggregatingBundle, double>> & node,
-			IHighWayMailBoxPtr highway_mailbox)
-			: future_{promise_.get_future()}
-		{
-			hi::subscribe(
-				*node->result_channel(),
-				[this](double result)
-				{
-					EXPECT_EQ(0, exec_counter_);
-					++exec_counter_;
-					promise_.set_value(result);
-				},
-				std::move(self_weak),
-				std::move(highway_mailbox));
 		}
 
-		std::promise<double> promise_;
-		std::future<double> future_;
-		std::atomic<std::uint32_t> exec_counter_{0};
+	private:
+		std::map<std::int32_t, double> operands_map_;
 	};
 
-	auto mailbox = highway.object_->mailbox();
-	auto checker = hi::make_self_shared<SelfProtectedChecker>(aggregating_future, mailbox);
+	const auto proxy = hi::make_proxy(*highway);
+	const auto aggregating_future = hi::make_self_shared<hi::DefaultNode<double, double, AggregatingBundle>>(proxy, 0);
+
+	int calls{0};
+
+	const auto result = hi::ExecutionTreeResultNodeFabric<double>::create(
+		[&](double /*result*/)
+		{
+			++calls;
+			EXPECT_EQ(calls, 1);
+		},
+		proxy,
+		0);
+
+	// подключем узел результат к узлу агрегации
+	aggregating_future->connect_to_direct_channel<double>(result.get(), 0, 0);
 
 	// подключаем каналы операндов
-	std::vector<std::shared_ptr<hi::PublishOneForMany<double>>> operands;
-	for (std::uint32_t i = 0; i < expected_operands_count; ++i)
+	std::vector<std::weak_ptr<ISubscription<double>>> operands;
+	for (std::int32_t i = 0; i < expected_operands_count; ++i)
 	{
-		auto it = operands.emplace_back(hi::make_self_shared<hi::PublishOneForMany<double>>());
-		aggregating_future->add_operand_channel(*(it->subscribe_channel()));
+		operands.emplace_back(aggregating_future->in_param_direct_channel(i));
 	}
 
 	// шлём операнды
-	double expected{0};
 	double value{1.1};
+	double expected{0};
 	for (auto && it : operands)
 	{
-		it->publish(value);
+		if (auto channel = it.lock())
+		{
+			channel->send(value);
+		}
 		expected += value;
 		value *= 2.1;
 	}
 
-	EXPECT_EQ(expected, checker->future_.get());
-	EXPECT_EQ(1, checker->exec_counter_);
+	EXPECT_EQ(expected, result->get_result()->publication_);
 }
 
-TEST(TestAggregatingFutureNode, UsingLaunchParameters)
+TEST(TestAggregatingFutureNode, AggregateSumOnHighway)
 {
-	const auto highway = hi::make_self_shared<hi::SerialHighWay<>>();
-	const auto highway_mailbox = highway->mailbox();
+	RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
+	const std::int32_t expected_operands_count{10};
 
-	struct GeoPosition
+	class AggregatingBundle
 	{
-		double latitude_;
-		double longitude_;
-	};
-
-	struct AggregatingBundle
-	{
-		// no need in mutex because of hi::SerialHighWay
-		std::map<std::uint32_t, GeoPosition> operands_map_;
-	};
-
-	const std::uint32_t incoming_threads{4};
-	std::atomic<std::uint32_t> unique_senders_count{0};
-	auto aggregating_future = hi::AggregatingFutureNode<GeoPosition, AggregatingBundle, GeoPosition>::create(
-		[&](hi::AggregatingFutureNodeLogic<GeoPosition, AggregatingBundle, GeoPosition>::LaunchParameters params)
+	public:
+		void operator()(double publication, const std::int32_t label, hi::Publisher<double> & publisher)
 		{
-			auto && aggregating_bundle = params.aggregating_bundle_.get();
-			aggregating_bundle.operands_map_[params.operand_id_] = params.operand_value_;
-			double sum_latitude{0};
-			double sum_longitude{0};
-			for (auto && it : aggregating_bundle.operands_map_)
+			operands_map_.try_emplace(label, publication);
+			if (static_cast<std::int32_t>(operands_map_.size()) == expected_operands_count)
 			{
-				sum_latitude += it.second.latitude_;
-				sum_longitude += it.second.longitude_;
+				auto summ = std::accumulate(
+					operands_map_.begin(),
+					operands_map_.end(),
+					0.0,
+					[](const double previous, const std::pair<const std::int32_t, double> & p)
+					{
+						return previous + p.second;
+					});
+				publisher.publish_on_highway(summ);
 			}
-			const auto size = static_cast<std::uint32_t>(aggregating_bundle.operands_map_.size());
-			unique_senders_count = size;
-			params.result_publisher_.get().publish(GeoPosition{sum_latitude / size, sum_longitude / size});
-		},
-		highway->protector_for_tests_only(),
-		highway);
+		}
 
-	GeoPosition last_result{};
-	hi::subscribe(
-		aggregating_future->result_channel(),
-		[&](GeoPosition result)
-		{
-			last_result = result;
-		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
-
-	const GeoPosition real_geo_position{56.7951312, 60.5928054};
-	const auto location_sensor = [&](const double d_latitude, const double d_longitude)
-	{
-		auto sensor = hi::make_self_shared<hi::PublishOneForMany<GeoPosition>>();
-		aggregating_future->add_operand_channel(sensor->subscribe_channel());
-		sensor->publish(
-			GeoPosition{real_geo_position.latitude_ + d_latitude, real_geo_position.longitude_ + d_longitude});
+	private:
+		std::map<std::int32_t, double> operands_map_;
 	};
 
-	std::thread gps(
-		[&]
-		{
-			// so that the name of the thread can be seen in the debugger
-			hi::set_this_thread_name("gps");
-			location_sensor(0.0, -0.1);
-		});
-	std::thread beidou(
-		[&]
-		{
-			// so that the name of the thread can be seen in the debugger
-			hi::set_this_thread_name("beidou");
-			location_sensor(0.0, 0.1);
-		});
-	std::thread galileo(
-		[&]
-		{
-			// so that the name of the thread can be seen in the debugger
-			hi::set_this_thread_name("galileo");
-			location_sensor(-0.1, 0.0);
-		});
-	std::thread glonass(
-		[&]
-		{
-			// so that the name of the thread can be seen in the debugger
-			hi::set_this_thread_name("glonass");
-			location_sensor(0.1, 0.0);
-		});
+	const auto proxy = hi::make_proxy(*highway);
+	const auto aggregating_future = hi::make_self_shared<hi::DefaultNode<double, double, AggregatingBundle>>(proxy, 0);
 
-	gps.join();
-	beidou.join();
-	galileo.join();
-	glonass.join();
+	std::atomic<int> calls{0};
 
-	highway->flush_tasks();
+	const auto result = hi::ExecutionTreeResultNodeFabric<double>::create(
+		[&](double /*result*/)
+		{
+			++calls;
+		},
+		proxy,
+		0);
 
-	EXPECT_EQ(unique_senders_count, incoming_threads);
-	EXPECT_DOUBLE_EQ(last_result.latitude_, real_geo_position.latitude_);
-	EXPECT_DOUBLE_EQ(last_result.longitude_, real_geo_position.longitude_);
+	// подключем узел результат к узлу агрегации
+	aggregating_future->connect_to_highway_channel<double>(result.get(), 0, 0);
 
-	highway->destroy();
+	// подключаем каналы операндов
+	std::vector<std::weak_ptr<ISubscription<double>>> operands;
+	for (std::int32_t i = 0; i < expected_operands_count; ++i)
+	{
+		operands.emplace_back(aggregating_future->in_param_highway_channel(i));
+	}
+
+	// шлём операнды
+	double value{1.1};
+	double expected{0};
+	for (auto && it : operands)
+	{
+		if (auto channel = it.lock())
+		{
+			channel->send(value);
+		}
+		expected += value;
+		value *= 2.1;
+	}
+
+	EXPECT_EQ(expected, result->get_result()->publication_);
+	EXPECT_EQ(calls, 1);
+}
+
+TEST(TestAggregatingFutureNode, AggregateInPreConfiguredObject)
+{
+	RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
+	const auto proxy = hi::make_proxy(*highway);
+	const std::int32_t expected_operands_count{10};
+
+	class AggregatingBundle
+	{
+	public:
+		AggregatingBundle(std::promise<double> result_promise)
+			: result_promise_{std::move(result_promise)}
+		{
+		}
+
+		void operator()(double publication, const std::int32_t label)
+		{
+			operands_map_.try_emplace(label, publication);
+			if (static_cast<std::int32_t>(operands_map_.size()) == expected_operands_count)
+			{
+				auto summ = std::accumulate(
+					operands_map_.begin(),
+					operands_map_.end(),
+					0.0,
+					[](const double previous, const std::pair<const std::int32_t, double> & p)
+					{
+						return previous + p.second;
+					});
+				result_promise_.set_value(summ);
+			}
+		}
+
+	private:
+		std::map<std::int32_t, double> operands_map_;
+		std::promise<double> result_promise_;
+	};
+
+	std::promise<double> result_promise;
+	auto result_future = result_promise.get_future();
+	AggregatingBundle pre_configured_object{std::move(result_promise)};
+	const auto aggregating_future = hi::make_self_shared<hi::DefaultNode<double, double, AggregatingBundle>>(
+		std::move(pre_configured_object),
+		proxy,
+		0);
+
+	// подключаем каналы операндов
+	std::vector<std::weak_ptr<ISubscription<double>>> operands;
+	for (std::int32_t i = 0; i < expected_operands_count; ++i)
+	{
+		operands.emplace_back(aggregating_future->in_param_highway_channel(i));
+	}
+
+	// шлём операнды
+	double value{1.1};
+	double expected{0};
+	for (auto && it : operands)
+	{
+		if (auto channel = it.lock())
+		{
+			channel->send(value);
+		}
+		expected += value;
+		value *= 2.1;
+	}
+
+	EXPECT_EQ(expected, result_future.get());
 }
 
 } // namespace hi

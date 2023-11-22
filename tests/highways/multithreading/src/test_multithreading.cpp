@@ -9,148 +9,44 @@
 
 #include <gtest/gtest.h>
 
-#include <atomic>
-#include <cstdint>
-#include <memory>
 #include <mutex>
 #include <set>
-#include <vector>
 
 namespace hi
 {
 
 using namespace std::chrono_literals;
 
-struct CustomFreeTimeLogic
+TEST(TestMultithreading, CountTheNumberOfThreads)
 {
-	enum class HRstrategy
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::MultiThreadedTaskProcessingPlant>(16 /* threads */)};
+
+	std::set<std::thread::id> threads_set;
+	std::mutex threads_set_protector;
+	const auto get_threads_cnt = [&]
 	{
-		DecreaseWorkers,
-		FreezeNumberOfWorkers,
-		IncreaseWorkers
+		std::lock_guard lg{threads_set_protector};
+		const auto re = threads_set.size();
+		threads_set.clear();
+		return re;
 	};
 
-	std::chrono::milliseconds operator()(
-		HighWayBundle &,
-		const std::uint32_t,
-		const std::chrono::milliseconds work_time)
+	for (std::int32_t i = 0; i < 1000; ++i)
 	{
-		switch (hr_strategy_)
-		{
-		case HRstrategy::DecreaseWorkers:
-			return work_time + std::chrono::milliseconds{1000000};
-		case HRstrategy::FreezeNumberOfWorkers:
-			return work_time;
-		case HRstrategy::IncreaseWorkers:
-			return {};
-		}
-		return {};
-	}
-
-	std::string get_code_filename()
-	{
-		return __FILE__;
-	}
-
-	unsigned int get_code_line()
-	{
-		return __LINE__;
-	}
-
-	std::atomic<HRstrategy> hr_strategy_{HRstrategy::IncreaseWorkers};
-};
-
-using highway_types =
-	::testing::Types<ConcurrentHighWay<CustomFreeTimeLogic>, ConcurrentHighWayDebug<CustomFreeTimeLogic>>;
-
-template <class T>
-struct TestMultithreading : public ::testing::Test
-{
-};
-TYPED_TEST_SUITE(TestMultithreading, highway_types);
-
-TYPED_TEST(TestMultithreading, IncreaseDecreaseWorkers)
-{
-	auto test = [&]
-	{
-		std::string log;
-		std::mutex log_protector;
-
-		std::set<std::thread::id> threads;
-		std::mutex threads_protector;
-
-		auto publisher = hi::make_self_shared<hi::PublishOneForMany<std::int32_t>>();
-		auto publish = [&]
-		{
-			auto start = std::chrono::steady_clock::now();
-			while (std::chrono::steady_clock::now() - start < 300ms)
+		highway.object_->try_execute(
+			[&]
 			{
-				publisher->publish(0);
-				std::this_thread::sleep_for(1ms);
-			}
-		};
-
-		{
-			RAIIdestroy highway{hi::make_self_shared<TypeParam>(
-				"HighWay",
-				hi::create_default_logger(
-					[&](std::string msg)
-					{
-						std::lock_guard lg{log_protector};
-						log = std::move(msg);
-					}),
-				10ms, // max_task_execution_time
-				1ms // workers_change_period
-				)};
-
-			highway.object_->set_max_concurrent_workers(2);
-			publisher->subscribe(
-				[&](std::int32_t)
+				std::this_thread::sleep_for(10ms);
 				{
-					{
-						std::lock_guard lg{threads_protector};
-						threads.insert(std::this_thread::get_id());
-					}
-					std::this_thread::sleep_for(10ms);
-				},
-				highway.object_->protector_for_tests_only(),
-				highway.object_->mailbox());
-
-			// save thread id's
-			publish();
-			std::uint32_t last_size{0};
-			{
-				std::lock_guard lg{threads_protector};
-				last_size = static_cast<std::uint32_t>(threads.size());
-				EXPECT_GT(last_size, 1);
-			}
-
-			highway.object_->free_time_logic().hr_strategy_ = CustomFreeTimeLogic::HRstrategy::DecreaseWorkers;
-			highway.object_->flush_tasks();
-			// wait for decreasing
-			publish();
-
-			{
-				std::lock_guard lg{threads_protector};
-				threads.clear();
-			}
-
-			// save thread id's
-			publish();
-
-			{
-				std::lock_guard lg{threads_protector};
-				EXPECT_GT(last_size, static_cast<std::uint32_t>(threads.size()));
-			}
-		} // scope
-
-		EXPECT_NE(log.find("destroyed"), std::string::npos);
-	};
-
-	for (int i = 0; i < 10; ++i)
-	{
-		test();
+					std::lock_guard lg{threads_set_protector};
+					threads_set.insert(std::this_thread::get_id());
+				}
+			});
 	}
+
+	std::this_thread::sleep_for(100ms);
+	const auto cnt = get_threads_cnt();
+	EXPECT_GT(cnt, 2);
 }
 
 } // namespace hi

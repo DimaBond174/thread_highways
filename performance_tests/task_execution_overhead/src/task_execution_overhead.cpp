@@ -73,7 +73,7 @@ bool test_std_thread_v1(const std::uint32_t burden)
 		{
 			std::lock_guard lg{tasks_mutex};
 			tasks.emplace_back(
-				[&, i]
+				[&]
 				{
 					const auto cur = counter.fetch_add(1);
 					if (cur == burden)
@@ -130,7 +130,7 @@ bool test_std_thread_v2(const std::uint32_t burden)
 		{
 			std::lock_guard lg{tasks_mutex};
 			tasks.emplace_back(
-				[&, i]
+				[&]
 				{
 					const auto cur = counter.fetch_add(1);
 					if (cur == burden)
@@ -153,7 +153,7 @@ bool test_std_thread_v2(const std::uint32_t burden)
 */
 bool test_highway_block_on_wait_holder(const std::uint32_t burden)
 {
-	hi::RAIIdestroy highway{hi::make_self_shared<hi::SerialHighWay<>>()};
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
 
 	std::atomic<std::uint32_t> counter{0};
 	std::promise<bool> complete_promise;
@@ -161,7 +161,7 @@ bool test_highway_block_on_wait_holder(const std::uint32_t burden)
 
 	for (std::uint32_t i = 0; i <= burden; ++i)
 	{
-		highway.object_->post(
+		highway.object_->execute(
 			[&]
 			{
 				const auto cur = counter.fetch_add(1);
@@ -169,8 +169,7 @@ bool test_highway_block_on_wait_holder(const std::uint32_t burden)
 				{
 					complete_promise.set_value(true);
 				}
-			},
-			false);
+			});
 	}
 
 	return complete_future.get();
@@ -181,7 +180,7 @@ bool test_highway_block_on_wait_holder(const std::uint32_t burden)
 */
 bool test_highway_not_block(const std::uint32_t burden)
 {
-	hi::RAIIdestroy highway{hi::make_self_shared<hi::SerialHighWay<>>()};
+	hi::RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
 	highway.object_->set_capacity(burden);
 
 	std::atomic<std::uint32_t> counter{0};
@@ -190,7 +189,7 @@ bool test_highway_not_block(const std::uint32_t burden)
 
 	for (std::uint32_t i = 0; i <= burden; ++i)
 	{
-		highway.object_->post(
+		highway.object_->try_execute(
 			[&]
 			{
 				const auto cur = counter.fetch_add(1);

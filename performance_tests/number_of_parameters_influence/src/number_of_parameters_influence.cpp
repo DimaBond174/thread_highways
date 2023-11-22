@@ -8,9 +8,9 @@
 
 using namespace std::chrono_literals;
 
-std::shared_ptr<hi::SingleThreadHighWay<>> & pre_heated_highway()
+std::shared_ptr<hi::HighWay> & pre_heated_highway()
 {
-	static hi::RAIIdestroy highway{hi::make_self_shared<hi::SingleThreadHighWay<>>()};
+	static hi::RAIIdestroy highway{hi::make_self_shared<hi::HighWay>()};
 	return highway.object_;
 }
 
@@ -24,8 +24,7 @@ bool test_highway_channel_block_on_wait_holder(const std::uint32_t burden)
 
 	const auto highway = pre_heated_highway();
 
-	hi::subscribe(
-		subscribe_channel,
+	auto subsciption = publisher->subscribe_channel()->subscribe(
 		[&](std::uint32_t publication)
 		{
 			if (publication == burden)
@@ -34,8 +33,10 @@ bool test_highway_channel_block_on_wait_holder(const std::uint32_t burden)
 				return;
 			}
 		},
-		highway->protector_for_tests_only(),
-		highway->mailbox(),
+		highway,
+		__FILE__,
+		__LINE__,
+		false,
 		false);
 
 	for (std::uint32_t msg = 0; msg <= burden; ++msg)
@@ -46,7 +47,7 @@ bool test_highway_channel_block_on_wait_holder(const std::uint32_t burden)
 	return complete_future.get();
 } // test_highway_channel_block_on_wait_holder
 
-bool test_highway_channel_block_on_wait_holder_with_run_id_control(const std::uint32_t burden)
+bool test_highway_channel_block_on_wait_holder_with_keep_execution_control(const std::uint32_t burden)
 {
 	std::promise<bool> complete_promise;
 	auto complete_future = complete_promise.get_future();
@@ -56,24 +57,19 @@ bool test_highway_channel_block_on_wait_holder_with_run_id_control(const std::ui
 
 	const auto highway = pre_heated_highway();
 
-	hi::subscribe(
-		subscribe_channel,
-		[&](std::uint32_t publication,
-			const std::atomic<std::uint32_t> & global_run_id,
-			const std::uint32_t your_run_id)
+	auto subsciption = publisher->subscribe_channel()->subscribe(
+		[&](std::uint32_t publication, const std::atomic<bool> & keep_execution)
 		{
-			if (global_run_id != your_run_id)
-			{
-				return;
-			}
-			if (publication == burden)
+			if (publication == burden || !keep_execution.load())
 			{
 				complete_promise.set_value(true);
 				return;
 			}
 		},
-		highway->protector_for_tests_only(),
-		highway->mailbox(),
+		highway,
+		__FILE__,
+		__LINE__,
+		false,
 		false);
 
 	for (std::uint32_t msg = 0; msg <= burden; ++msg)
@@ -94,8 +90,7 @@ bool test_highway_channel_not_block(const std::uint32_t burden)
 
 	const auto highway = pre_heated_highway();
 
-	hi::subscribe(
-		subscribe_channel,
+	auto subsciption = publisher->subscribe_channel()->subscribe(
 		[&](std::uint32_t publication)
 		{
 			if (publication == burden)
@@ -104,8 +99,9 @@ bool test_highway_channel_not_block(const std::uint32_t burden)
 				return;
 			}
 		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
+		highway,
+		__FILE__,
+		__LINE__);
 
 	for (std::uint32_t msg = 0; msg <= burden; ++msg)
 	{
@@ -115,7 +111,7 @@ bool test_highway_channel_not_block(const std::uint32_t burden)
 	return complete_future.get();
 } // test_highway_channel_not_block
 
-bool test_highway_channel_not_block_with_run_id_control(const std::uint32_t burden)
+bool test_highway_channel_not_block_with_keep_execution_control(const std::uint32_t burden)
 {
 	std::promise<bool> complete_promise;
 	auto complete_future = complete_promise.get_future();
@@ -125,25 +121,18 @@ bool test_highway_channel_not_block_with_run_id_control(const std::uint32_t burd
 
 	const auto highway = pre_heated_highway();
 
-	hi::subscribe(
-		subscribe_channel,
-		[&](std::uint32_t publication,
-			const std::atomic<std::uint32_t> & global_run_id,
-			const std::uint32_t your_run_id)
+	auto subsciption = publisher->subscribe_channel()->subscribe(
+		[&](std::uint32_t publication, const std::atomic<bool> & keep_execution)
 		{
-			if (global_run_id != your_run_id)
-			{
-				return;
-			}
-
-			if (publication == burden)
+			if (publication == burden || !keep_execution.load())
 			{
 				complete_promise.set_value(true);
 				return;
 			}
 		},
-		highway->protector_for_tests_only(),
-		highway->mailbox());
+		highway,
+		__FILE__,
+		__LINE__);
 
 	for (std::uint32_t msg = 0; msg <= burden; ++msg)
 	{
@@ -198,13 +187,13 @@ int main(int /* argc */, char ** /* argv */)
 	funs.emplace_back(
 		TestBundle{test_highway_channel_block_on_wait_holder, "test_highway_channel_block_on_wait_holder", 0us});
 	funs.emplace_back(TestBundle{
-		test_highway_channel_block_on_wait_holder_with_run_id_control,
-		"test_highway_channel_block_on_wait_holder_with_run_id_control",
+		test_highway_channel_block_on_wait_holder_with_keep_execution_control,
+		"test_highway_channel_block_on_wait_holder_with_keep_execution_control",
 		0us});
 	funs.emplace_back(TestBundle{test_highway_channel_not_block, "test_highway_channel_not_block", 0us});
 	funs.emplace_back(TestBundle{
-		test_highway_channel_not_block_with_run_id_control,
-		"test_highway_channel_not_block_with_run_id_control",
+		test_highway_channel_not_block_with_keep_execution_control,
+		"test_highway_channel_not_block_with_keep_execution_control",
 		0us});
 
 	main_test(funs, 10000);

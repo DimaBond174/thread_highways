@@ -1,5 +1,12 @@
-#ifndef CoutScope_H
-#define CoutScope_H
+/*
+ * This is the source code of thread_highways library
+ *
+ * Copyright (c) Dmitriy Bondarenko
+ * feel free to contact me: bondarenkoda@gmail.com
+ */
+
+#ifndef THREADS_HIGHWAYS_TOOLS_COUT_SCOPE_H
+#define THREADS_HIGHWAYS_TOOLS_COUT_SCOPE_H
 
 #include <chrono>
 #include <iostream>
@@ -57,4 +64,4 @@ struct CoutScope
 
 } // namespace hi
 
-#endif // CoutScope_H
+#endif // THREADS_HIGHWAYS_TOOLS_COUT_SCOPE_H

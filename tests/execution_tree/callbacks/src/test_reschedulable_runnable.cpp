@@ -14,119 +14,112 @@ namespace hi
 namespace
 {
 
-using highway_types = ::testing::Types<SerialHighWayWithScheduler<>, SingleThreadHighWayWithScheduler<>>;
+struct TestData
+{
+	const std::string_view description_;
+	std::function<ReschedulableRunnable(std::reference_wrapper<std::promise<bool>>)> creator_;
+};
 
-template <class T>
-struct TestReschedulableRunnableCallbacks : public ::testing::Test
+TestData test_data[] = {
+	TestData{
+		"AllParameters",
+		[](std::reference_wrapper<std::promise<bool>> promise)
+		{
+			return ReschedulableRunnable::create(
+				[promise](Schedule &, const std::atomic<bool> &)
+				{
+					promise.get().set_value(true);
+				},
+				std::chrono::steady_clock::time_point{},
+				__FILE__,
+				__LINE__);
+		}},
+	TestData{
+		"Without_keep_execution",
+		[](std::reference_wrapper<std::promise<bool>> promise)
+		{
+			return ReschedulableRunnable::create(
+				[promise](Schedule &)
+				{
+					promise.get().set_value(true);
+				},
+				std::chrono::steady_clock::time_point{},
+				__FILE__,
+				__LINE__);
+		}},
+	TestData{
+		"FunctorAllParameters",
+		[](std::reference_wrapper<std::promise<bool>> promise)
+		{
+			struct Logic
+			{
+				Logic(std::reference_wrapper<std::promise<bool>> promise)
+					: promise_{promise}
+				{
+				}
+				void operator()(Schedule &, const std::atomic<bool> &)
+				{
+					promise_.get().set_value(true);
+				}
+				std::reference_wrapper<std::promise<bool>> promise_;
+				std::mutex mutex_;
+			};
+			auto logic = std::make_shared<Logic>(promise);
+			return ReschedulableRunnable::create(
+				std::move(logic),
+				std::chrono::steady_clock::time_point{},
+				__FILE__,
+				__LINE__);
+		}},
+	TestData{
+		"FunctorWithout_keep_execution",
+		[](std::reference_wrapper<std::promise<bool>> promise)
+		{
+			struct Logic
+			{
+				Logic(std::reference_wrapper<std::promise<bool>> promise)
+					: promise_{promise}
+				{
+				}
+				void operator()(Schedule &)
+				{
+					promise_.get().set_value(true);
+				}
+				std::reference_wrapper<std::promise<bool>> promise_;
+				std::mutex mutex_;
+			};
+			auto logic = std::make_shared<Logic>(promise);
+			return ReschedulableRunnable::create(
+				std::move(logic),
+				std::chrono::steady_clock::time_point{},
+				__FILE__,
+				__LINE__);
+		}},
+};
+
+struct ReschedulableRunnableCallbacksTest : public ::testing::TestWithParam<TestData>
 {
 };
-TYPED_TEST_SUITE(TestReschedulableRunnableCallbacks, highway_types);
 
-TYPED_TEST(TestReschedulableRunnableCallbacks, RunAndWaitResult)
+INSTANTIATE_TEST_SUITE_P(
+	ReschedulableRunnableCallbacksTestInstance,
+	ReschedulableRunnableCallbacksTest,
+	::testing::ValuesIn(test_data),
+	[](const ::testing::TestParamInfo<TestData> & test_info)
+	{
+		return std::string{test_info.param.description_};
+	});
+
+TEST_P(ReschedulableRunnableCallbacksTest, RunAndWaitResultDirect)
 {
-	const auto highway = hi::make_self_shared<TypeParam>();
+	const auto highway = hi::make_self_shared<HighWay>();
+
 	std::promise<bool> promise;
 	auto future = promise.get_future();
 
-	const auto check = [&]
-	{
-		EXPECT_TRUE(future.get());
-		promise = {};
-		future = promise.get_future();
-	};
-
-	highway->add_reschedulable_runnable(
-		[&](ReschedulableRunnable::LaunchParameters)
-		{
-			promise.set_value(true);
-		},
-		__FILE__,
-		__LINE__);
-	check();
-
-	highway->add_reschedulable_runnable(
-		[&](ReschedulableRunnable::Schedule &, const std::atomic<std::uint32_t> &, const std::uint32_t)
-		{
-			promise.set_value(true);
-		},
-		__FILE__,
-		__LINE__);
-	check();
-
-	highway->add_reschedulable_runnable(
-		[&](ReschedulableRunnable::Schedule &)
-		{
-			promise.set_value(true);
-		},
-		__FILE__,
-		__LINE__);
-	check();
-
-	{
-		struct Fun
-		{
-			Fun(std::reference_wrapper<std::promise<bool>> promise)
-				: promise_{std::move(promise)}
-			{
-			}
-			void operator()(ReschedulableRunnable::LaunchParameters)
-			{
-				promise_.get().set_value(true);
-			}
-
-			std::reference_wrapper<std::promise<bool>> promise_;
-		};
-
-		highway->add_reschedulable_runnable(Fun{promise}, __FILE__, __LINE__);
-		check();
-
-		highway->add_reschedulable_runnable(std::make_unique<Fun>(promise), __FILE__, __LINE__);
-		check();
-	}
-
-	{
-		struct Fun
-		{
-			Fun(std::reference_wrapper<std::promise<bool>> promise)
-				: promise_{std::move(promise)}
-			{
-			}
-			void operator()(ReschedulableRunnable::Schedule &, const std::atomic<std::uint32_t> &, const std::uint32_t)
-			{
-				promise_.get().set_value(true);
-			}
-
-			std::reference_wrapper<std::promise<bool>> promise_;
-		};
-
-		highway->add_reschedulable_runnable(Fun{promise}, __FILE__, __LINE__);
-		check();
-
-		highway->add_reschedulable_runnable(std::make_unique<Fun>(promise), __FILE__, __LINE__);
-		check();
-	}
-
-	{
-		struct Fun
-		{
-			Fun(std::reference_wrapper<std::promise<bool>> promise)
-				: promise_{std::move(promise)}
-			{
-			}
-			void operator()(ReschedulableRunnable::Schedule &)
-			{
-				promise_.get().set_value(true);
-			}
-
-			std::reference_wrapper<std::promise<bool>> promise_;
-		};
-
-		highway->add_reschedulable_runnable(Fun{promise}, __FILE__, __LINE__);
-		check();
-
-		highway->add_reschedulable_runnable(std::make_unique<Fun>(promise), __FILE__, __LINE__);
-		check();
-	}
+	const TestData & test_params = GetParam();
+	highway->schedule(test_params.creator_(promise));
+	EXPECT_TRUE(future.get());
 
 	highway->destroy();
 }

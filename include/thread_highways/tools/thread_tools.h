@@ -11,7 +11,7 @@
 #if _WIN32
 #	include <thread_highways/tools/windows/thread_tools.h>
 #elif __ANDROID__
-#	include <thread_highways/tools/linux/thread_tools.h>
+//#	include <thread_highways/tools/linux/thread_tools.h>
 #elif __linux__
 #	include <thread_highways/tools/linux/thread_tools.h>
 #elif __mac__

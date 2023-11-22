@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef SAFE_INVOKE_H
-#define SAFE_INVOKE_H
+#ifndef THREADS_HIGHWAYS_TOOLS_SAFE_INVOKE_H
+#define THREADS_HIGHWAYS_TOOLS_SAFE_INVOKE_H
 
 #include <functional>
 #include <memory>
@@ -16,8 +16,8 @@ namespace hi
 {
 
 // ShowType<decltype(t)> xType;
-template<typename T>
-    class ShowType;
+template <typename T>
+class ShowType;
 
 template <typename Fun, typename Protector, typename... Args>
 void safe_invoke_void(Fun && fun, Protector & protector, Args &&... args)
@@ -99,4 +99,4 @@ struct can_be_dereferenced : decltype(detail::can_be_dereferenced_impl<T>(0))
 
 } // namespace hi
 
-#endif // SAFE_INVOKE_H
+#endif // THREADS_HIGHWAYS_TOOLS_SAFE_INVOKE_H

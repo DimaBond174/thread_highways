@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef WINDOWS_THREADS_H
-#define WINDOWS_THREADS_H
+#ifndef THREADS_HIGHWAYS_TOOLS_WINDOWS_THREAD_TOOLS_H
+#define THREADS_HIGHWAYS_TOOLS_WINDOWS_THREAD_TOOLS_H
 
 #include <Windows.h>
 
@@ -79,4 +79,4 @@ std::string get_this_thread_name()
 } // namespace
 } // namespace hi
 
-#endif // WINDOWS_THREADS_H
+#endif // THREADS_HIGHWAYS_TOOLS_WINDOWS_THREAD_TOOLS_H

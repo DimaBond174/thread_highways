@@ -5,8 +5,8 @@
  * feel free to contact me: bondarenkoda@gmail.com
  */
 
-#ifndef SMALL_TOOLS_H
-#define SMALL_TOOLS_H
+#ifndef THREADS_HIGHWAYS_TOOLS_SMALL_TOOLS_H
+#define THREADS_HIGHWAYS_TOOLS_SMALL_TOOLS_H
 
 #include <chrono>
 #include <memory>
@@ -53,10 +53,15 @@ struct RAIIdestroy
 		object_->destroy();
 	}
 
-    T& operator->()
-    {
-        return object_;
-    }
+	T & operator->()
+	{
+		return object_;
+	}
+
+	T operator*()
+	{
+		return object_;
+	}
 
 	T object_;
 };
@@ -68,14 +73,14 @@ struct RAIIdestroy
  * https://github.com/DimaBond174/thread_highways/blob/main/include/thread_highways/highways/ConcurrentHighWay.h
  */
 template <typename T>
-struct RAIIfinaliser
+struct Finally
 {
-	RAIIfinaliser(T runnable)
+	Finally(T runnable)
 		: runnable_{std::move(runnable)}
 	{
 	}
 
-	~RAIIfinaliser()
+	~Finally()
 	{
 		runnable_();
 	}
@@ -85,4 +90,4 @@ struct RAIIfinaliser
 
 } // namespace hi
 
-#endif // SMALL_TOOLS_H
+#endif // THREADS_HIGHWAYS_TOOLS_SMALL_TOOLS_H
