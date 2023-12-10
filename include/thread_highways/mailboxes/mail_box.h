@@ -106,6 +106,7 @@ public:
 	 */
 	void free_holder(Holder<T> * holder)
 	{
+		holder->t_.clear();
 		empty_holders_stack_.push(holder);
 		empty_holders_stack_semaphore_.signal();
 	}
@@ -131,20 +132,10 @@ public: // IMailBoxSendHere
 	 */
 	bool send_may_fail(T && t)
 	{
-		Holder<T> * holder = empty_holders_stack_.pop();
-		if (holder)
-		{
-			holder->t_ = std::move(t);
-		}
-		else
-		{
-			if (capacity_.load(std::memory_order_relaxed) < allocated_holders_.load(std::memory_order_relaxed))
-			{
-				return false;
-			}
-			++allocated_holders_;
-			holder = new Holder<T>{std::move(t)};
-		}
+		Holder<T> * holder = aba_safe_get_free_holder();
+		if (!holder)
+			return false; // may_fail
+		holder->t_ = std::move(t);
 
 		messages_stack_.push(holder);
 		messages_stack_semaphore_.signal_keep_one();
@@ -160,36 +151,50 @@ public: // IMailBoxSendHere
 	 */
 	void send_may_blocked(T && t)
 	{
-		Holder<T> * holder = empty_holders_stack_.pop();
-		if (holder)
+		Holder<T> * holder{nullptr};
+		do
 		{
-			holder->t_ = std::move(t);
+			holder = aba_safe_get_free_holder();
+			if (holder)
+				break;
+			empty_holders_stack_semaphore_.wait();
 		}
-		else
+		while (keep_execution_.load(std::memory_order_relaxed));
+
+		if (!holder)
 		{
-			if (capacity_.load(std::memory_order_relaxed) > allocated_holders_.load(std::memory_order_relaxed))
-			{
-				++allocated_holders_;
-				holder = new Holder{std::move(t)};
-			}
-			else
-			{
-				while (!holder && empty_holders_stack_semaphore_.wait())
-				{
-					holder = empty_holders_stack_.pop();
-				}
-				if (holder)
-				{
-					holder->t_ = std::move(t);
-				}
-			}
+			return; // keep_execution_ был сброшен
 		}
 
-		if (holder)
+		holder->t_ = std::move(t);
+		messages_stack_.push(holder);
+		messages_stack_semaphore_.signal_keep_one();
+	}
+
+private:
+	Holder<T> * aba_safe_get_free_holder()
+	{
+		// Преимущество отдаётся аллокации новых холдеров чтобы получить capacity объём
+		// в круге своего использования защищающий от ABA. Это даст замедление в начале работы
+		// так как будет capacity_ аллокаций холдеров, но дальше холдеры будут переиспользоваться
+		// и почтовый ящик выйдет на рабочую скорость (== есть эффект прогрева двигателя)
+		if (capacity_.load(std::memory_order_relaxed) > allocated_holders_.load(std::memory_order_relaxed))
 		{
-			messages_stack_.push(holder);
-			messages_stack_semaphore_.signal_keep_one();
+			++allocated_holders_;
+			return new Holder<T>{};
 		}
+
+		// Очередь обеспечивает защиту от ABA за счёт того что анализируемый на compare_exchange_weak
+		// в конкурентном потоке указатель холдера после отработки в захватившем потоке вернётся
+		// не в empty_holders_stack_, а в конец очереди empty_holders_queue_
+		// и потом потребуется ещё один переход в messages_stack_. Этот двойной переход
+		// с промежуточной capacity_ массой делает ABA практически невозможной.
+		Holder<T> * holder = empty_holders_queue_.pop();
+		if (holder)
+			return holder;
+
+		empty_holders_stack_.move_to(empty_holders_queue_);
+		return empty_holders_queue_.pop();
 	}
 
 private:
@@ -199,6 +204,14 @@ private:
 
 	// Pool of free holders
 	ThreadSafeStack<Holder<T>> empty_holders_stack_;
+	// Защита от ABA достигается за счёт того что холдер может вернуться в работу
+	// только в порядке очереди использования capacity_ количества холдеров => для возникновения
+	// ABA должно в момент выполнения compare_exchange_weak пройти через стэк capacity_ количества
+	// => появляется инструмент снижения вероятности ABA через capacity_ параметр
+	// (Сколько атомарных операций может пройти в момент фриза compare_exchange_weak?
+	// В альтернативных защитах от ABA используется счётчик-идентификатор состояния холдера - по сути инструмент
+	// аналогичный)
+	ThreadSafeStack<Holder<T>> empty_holders_queue_;
 	Semaphore empty_holders_stack_semaphore_;
 
 	// Holder allocation limiter
@@ -208,17 +221,6 @@ private:
 	// Unrolled stack - so the messages are now in the correct order
 	ThreadSafeStack<Holder<T>> work_queue_;
 	std::atomic<bool> keep_execution_{true};
-};
-
-template <typename T>
-struct IMailBoxSendHere
-{
-	virtual ~IMailBoxSendHere() = default;
-
-	// Multi-threaded access
-	virtual bool send_may_fail(T && t) = 0;
-	// Если вернул false, значит почтового ящика больше нет и слать снова незачем
-	virtual bool send_may_blocked(T && t) = 0;
 };
 
 } // namespace hi

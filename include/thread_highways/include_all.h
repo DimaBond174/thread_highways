@@ -24,6 +24,7 @@
 #include <thread_highways/execution_tree/runnable.h>
 
 #include <thread_highways/highways/highway.h>
+#include <thread_highways/highways/highway_aba_safe.h>
 #include <thread_highways/highways/highways_manager.h>
 #include <thread_highways/highways/multi_threaded_task_processing_plant.h>
 

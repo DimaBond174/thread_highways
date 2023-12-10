@@ -21,17 +21,15 @@ using namespace std::chrono_literals;
 struct TestDataParallelCalculations
 {
 	std::string_view description_;
-	std::uint32_t loop_cnt_;
 	std::int32_t threads_cnt_;
 	std::shared_ptr<hi::HighWaysManager> highways_manager_;
 };
 
 TestDataParallelCalculations test_data[] = {
-	TestDataParallelCalculations{"NoTimeControl", 10, 5, hi::make_self_shared<hi::HighWaysManager>(1u, 2u)},
+	TestDataParallelCalculations{"NoTimeControl", 64, hi::make_self_shared<hi::HighWaysManager>(1u, 2u)},
 	TestDataParallelCalculations{
 		"WithTimeControl",
-		10,
-		5,
+		32,
 		hi::make_self_shared<hi::HighWaysManager>(
 			1u,
 			1u,
@@ -67,11 +65,8 @@ TEST_P(ParallelCalculationsTest, ExpectedResult)
 		Data()
 			: result_future_{result_.get_future()} {};
 
-		std::uint32_t data_; // текущий результат
-		std::vector<std::int32_t> channels_path_; // каналы из которых приходили данные
-		std::vector<std::uint32_t> data_path_; // какие данные приходили из каналов
-		std::uint32_t loop_num_{0}; // номер прохода по нейросети
-		std::promise<std::uint32_t> result_; // канал публикации результата
+		std::uint32_t data_{};
+		std::promise<std::uint32_t> result_;
 		std::future<std::uint32_t> result_future_;
 	};
 	using DataPtr = std::shared_ptr<Data>;
@@ -79,15 +74,14 @@ TEST_P(ParallelCalculationsTest, ExpectedResult)
 	struct CalculationsResult
 	{
 		DataPtr data_;
-		std::uint32_t result_; // результаты сложных вычислений
+		std::uint32_t result_{};
 	};
 
 	class AggregatingBundle
 	{
 	public:
-		AggregatingBundle(std::uint32_t loop_cnt, std::int32_t threads_cnt)
-			: loop_cnt_{loop_cnt}
-			, threads_cnt_{threads_cnt}
+		AggregatingBundle(std::int32_t threads_cnt)
+			: threads_cnt_{threads_cnt}
 		{
 		}
 
@@ -96,49 +90,44 @@ TEST_P(ParallelCalculationsTest, ExpectedResult)
 			const std::int32_t label,
 			hi::Publisher<CalculationsResult> & publisher)
 		{
+			if (0 == label)
+			{ // это сигнал с main thread
+				// Запускаю на многопоточку распределённые вычисления
+				publisher.publish_on_highway(сalculations_result);
+				return;
+			}
+
 			auto & cnt = operands_map_[сalculations_result.data_];
 			cnt += 1;
-
 			сalculations_result.data_->data_ += сalculations_result.result_;
-			сalculations_result.data_->channels_path_.emplace_back(label);
-			сalculations_result.data_->data_path_.emplace_back(сalculations_result.result_);
+
 			if (cnt == threads_cnt_)
 			{
-				cnt = 0;
-				сalculations_result.data_->loop_num_ += 1u;
-				if (loop_cnt_ > сalculations_result.data_->loop_num_)
-				{
-					сalculations_result.result_ = сalculations_result.data_->data_;
-					publisher.publish_on_highway(сalculations_result);
-				}
-				else
-				{
-					сalculations_result.data_->result_.set_value(сalculations_result.data_->data_);
-				}
+				сalculations_result.data_->result_.set_value(сalculations_result.data_->data_);
 			}
 		}
 
 	private:
-		const std::uint32_t loop_cnt_;
 		const std::int32_t threads_cnt_;
 		std::unordered_map<DataPtr, std::int32_t> operands_map_;
 	};
 
 	auto aggregating_node = hi::ExecutionTreeDefaultNodeFabric<CalculationsResult, CalculationsResult>::create(
-		AggregatingBundle{test_params.loop_cnt_, test_params.threads_cnt_},
+		AggregatingBundle{test_params.threads_cnt_},
 		test_params.highways_manager_->get_highway(100));
 
 	std::vector<std::shared_ptr<hi::ISubscription<CalculationsResult>>> incoming_channels;
+	const std::int32_t channels_cnt = test_params.threads_cnt_ + 1; // [0] for main thread
 	// Создаю каналы через которые будут приходить данные.
 	// Можно обойтись и одним каналом если нет необходимости знать идентификатор источника входящих данных.
-	for (std::int32_t i = 0; i < test_params.threads_cnt_; ++i)
+	for (std::int32_t i = 0; i < channels_cnt; ++i)
 	{
 		incoming_channels.emplace_back(aggregating_node->in_param_highway_channel(i, false).lock());
 	}
 
 	auto execute_parallel = [&](CalculationsResult data)
 	{
-		for (std::int32_t i = 0; i < test_params.threads_cnt_; ++i)
+		for (std::int32_t i = 1; i < channels_cnt; ++i)
 		{
 			test_params.highways_manager_->execute(
 				[&, base_data = data.result_, i, data]
@@ -164,17 +153,20 @@ TEST_P(ParallelCalculationsTest, ExpectedResult)
 	{
 		auto data = std::make_shared<Data>();
 		datas.emplace_back(data);
-		for (std::int32_t i = 0; i < test_params.threads_cnt_; ++i)
-		{
-			incoming_channels[i]->send(CalculationsResult{data, 0});
-		}
+		incoming_channels[0]->send(CalculationsResult{data, 0});
+	}
+
+	std::uint32_t expected{0};
+	for (std::uint32_t i = 1; i <= static_cast<std::uint32_t>(test_params.threads_cnt_); ++i)
+	{
+		expected += i;
 	}
 
 	// Встаю на ожидание результатов:
 	for (auto it : datas)
 	{
 		auto res = it->result_future_.get();
-		EXPECT_EQ(res, 20155390);
+		EXPECT_EQ(res, expected);
 	}
 }
 

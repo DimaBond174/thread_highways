@@ -17,6 +17,10 @@ namespace hi
 template <typename T>
 struct Holder
 {
+	Holder()
+	{
+	}
+
 	Holder(T && t)
 		: t_{std::move(t)}
 	{

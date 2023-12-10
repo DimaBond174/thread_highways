@@ -145,9 +145,24 @@ public:
 		return Runnable{new RunnableProtectedHolderImpl{std::move(runnable), std::move(protector)}, filename, line};
 	}
 
+	void clear()
+	{
+		static const char * null_object_filename{"null object"};
+		filename_ = null_object_filename;
+		line_ = 0u;
+		if (runnable_)
+		{
+			delete runnable_;
+			runnable_ = nullptr;
+		}
+	}
 	~Runnable()
 	{
-		delete runnable_;
+		clear();
+	}
+	Runnable()
+	{
+		clear();
 	}
 	Runnable(const Runnable & rhs) = delete;
 	Runnable & operator=(const Runnable & rhs) = delete;

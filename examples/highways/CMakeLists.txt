@@ -1,3 +1,4 @@
+add_subdirectory(aba)
 add_subdirectory(manager)
 add_subdirectory(monitoring)
 add_subdirectory(multy_thread_example)

@@ -102,6 +102,17 @@ public:
 		return current_folder_map_.size();
 	}
 
+	// Получить уникальный для уровня ключ
+	Key generate_unique_key()
+	{
+		Key key = 1;
+		while (current_folder_map_.find(key) != current_folder_map_.end())
+		{
+			++key;
+		}
+		return key;
+	}
+
 	void emplace_dson(std::unique_ptr<IObjView> obj) override
 	{
 		if (this == current_path_.back().ref_)

@@ -13,6 +13,8 @@
 namespace hi
 {
 
+// Под капот этого интерфейса можно класть почтовые ящики не наследуя ящики
+// от интерфейса путём враппера
 template <typename T>
 struct IMailBoxSendHere
 {
