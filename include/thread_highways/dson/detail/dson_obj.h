@@ -245,9 +245,13 @@ struct GetObj;
 template <typename T>
 struct GetObj<T, true>
 {
-	static void get(const char * buf, T & val)
+    static void get(const char * buf, const std::int32_t /*size*/, bool with_header, T & val)
 	{
-		detail::get(buf + detail::header_size, val);
+        if (with_header) {
+            detail::get(buf + detail::header_size, val);
+        } else {
+            detail::get(buf, val);
+        }
 	}
 
 	static bool buf_view(const T & val, BufUCharView & result)
@@ -260,11 +264,15 @@ struct GetObj<T, true>
 template <typename T>
 struct GetObj<T, false>
 {
-	static void get(const char * buf, T & val)
+    static void get(const char * buf, const std::int32_t size, bool with_header, T & val)
 	{
-		DsonHeader header;
-		detail::get_and_shift(buf, header);
-		detail::get(buf, header.data_size_, val);
+        if (with_header) {
+            DsonHeader header;
+            detail::get_and_shift(buf, header);
+            detail::get(buf, header.data_size_, val);
+        } else {
+            detail::get(buf, size, val);
+        }
 	}
 
 	static bool buf_view(const T & val, BufUCharView & result)
@@ -381,9 +389,10 @@ public: // IDsonObjView
 		return header_.key_;
 	}
 
-	bool buf_view(BufUCharView & result) override
+    bool buf_view(BufUCharView & result, bool& with_header) override
 	{
-		return detail::GetObj<T, detail::IsDsonNumber<T>::result>::buf_view(obj_, result);
+        with_header = false;
+        return detail::GetObj<T, detail::IsDsonNumber<T>::result>::buf_view(obj_, result);
 	}
 
 	result_t upload_to(const std::int32_t at, detail::IUploader & uploader) override
@@ -455,7 +464,7 @@ public:
 	template <typename T>
 	void get(T & val)
 	{
-		detail::GetObj<T, detail::IsDsonNumber<T>::result>::get(buf_, val);
+        detail::GetObj<T, detail::IsDsonNumber<T>::result>::get(buf_, 0, true, val);
 	}
 
 public: // IDsonObjView
@@ -474,10 +483,11 @@ public: // IDsonObjView
 		return detail::get_key(buf_);
 	}
 
-	bool buf_view(BufUCharView & result) override
+    bool buf_view(BufUCharView & result, bool& with_header) override
 	{
 		if (!buf_)
 			return false;
+        with_header = false;
 		result.init(buf_ + detail::header_size, static_cast<std::size_t>(detail::get_data_size(buf_)));
 		return true;
 	}

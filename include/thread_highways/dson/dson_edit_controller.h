@@ -60,7 +60,7 @@ public:
 
 	~DsonEditController()
 	{
-		close();
+        clear();
 	}
 
 	void create_default(const std::string & folder)
@@ -69,6 +69,12 @@ public:
 		HI_ASSERT(okCreatedNew == DsonFromFile::create(temp_file_));
 		reload_all();
 	}
+
+    void clear() override
+    {
+        close();
+        DsonFromFile::clear();
+    }
 
 	void open(std::string path) override
 	{
@@ -209,7 +215,7 @@ public:
 			}
 		case detail::types_map<std::int64_t>::value:
 			{
-				obj = std::make_unique<DsonObj<std::int8_t>>(static_cast<Key>(key), value);
+				obj = std::make_unique<DsonObj<std::int64_t>>(static_cast<Key>(key), value);
 				break;
 			}
 		case detail::types_map<std::uint64_t>::value:
@@ -232,6 +238,12 @@ public:
 	void emplace_serializable(const K key, const Serializable & val)
 	{
 		emplace<K, std::string>(key, val.serialize());
+	}
+
+	void rename_item(const Key old_key, const Key new_key) override
+	{
+		NewDson::rename_item(old_key, new_key);
+		reload_folder();
 	}
 
 	bool find(const Key key, const std::function<void(IObjView *)> & fun) override
@@ -299,7 +311,8 @@ public:
 				return;
 			}
 		}
-		HI_ASSERT(false);
+
+        HI_ASSERT(cast<T>(result, view));
 	}
 
 	void get_data_at(const std::size_t index, const std::int32_t key, BufUCharView & result)
@@ -308,7 +321,7 @@ public:
 		HI_ASSERT(!!ptr && ptr->obj_key() == key);
 
 		IObjView * view = ptr->self();
-		HI_ASSERT(!!view && view->buf_view(result));
+        HI_ASSERT(!!view && view->buf_view_skip_header(result));
 	}
 
 	void get_data_at(const std::size_t index, const std::int32_t key, std::string_view & result)
@@ -350,15 +363,31 @@ public:
 	 * Закрывает текущий открытый Dson
 	 * @return индекс на котором был этот Dson на уровне выше чтобы GUI мог правильно подсветить
 	 */
-	result_t close_folder(std::size_t & out_index)
+    std::size_t close_folder()
 	{
 		if (current_path_.size() < 2u)
-			return eFail; // нельзя закрыть root dson
-		out_index = current_path_.back().index_;
+            return 0u; // нельзя закрыть root dson, остаёмся на 0
+        const auto out_index = current_path_.back().index_;
 		current_path_.pop_back(); // закрыли текущий
 		reload_folder();
-		return ok;
+        return out_index;
 	}
+
+    bool is_top_folder_level()
+    {
+        return current_path_.size() < 2u;
+    }
+
+    void folder_set_key(const Key key)
+    {
+        if (is_top_folder_level())
+        {
+            set_key(key);
+            return;
+        }
+
+        current_path_[current_path_.size() - 1].ref_->rename_item(current_path_.back().ref_->obj_key(), key);
+    }
 
 	void delete_at(const std::size_t index)
 	{
@@ -370,9 +399,71 @@ public:
 		reload_folder();
 	}
 
+    void erase(const Key key) override
+    {
+        DsonFromFile::erase(key);
+        reload_folder();
+    }
+
+    /**
+     * @brief dictionary_filter
+     * @param filter фильтр на имя
+     * @param current_key элемент с текущим ключом не отфильтровывается
+     * @return  размер справочника
+     */
+    std::size_t dictionary_filter(std::string filter, const Key current_key)
+    {
+        auto& dictionary = get_dictionary();
+        HI_ASSERT(dictionary.obj_key() == static_cast<Key>(SystemKey::Dictionary));
+        if (dictionary_filter_ == filter && dictionary_cache_.size())
+        {
+            return dictionary_cache_.size();
+        }
+        dictionary_filter_ = filter;
+        dictionary_cache_.clear();
+
+        dictionary.private_iterate([&](std::unique_ptr<IObjView> item)
+        {
+            std::string val;
+            if (!cast<std::string>(val, item.get())) return;
+            const auto key = item->obj_key();
+            if (current_key != key && !dictionary_filter_.empty() && val.find(dictionary_filter_) == std::string::npos) return;
+            dictionary_cache_.emplace(key, std::move(val));
+        });
+        return dictionary_cache_.size();
+    }
+
+    void get_dictionary_item_at(const std::size_t index, Key& key, std::string& name)
+    {
+        HI_ASSERT(get_dictionary().obj_key() == static_cast<Key>(SystemKey::Dictionary));
+        HI_ASSERT(index < dictionary_cache_.size());
+        auto it = dictionary_cache_.begin(); // 0
+        std::advance(it, index);
+        key = it->first;
+        name = it->second;
+    }
+
+    std::optional<std::string> get_dictionary_name(const Key key)
+    {
+        HI_ASSERT(get_dictionary().obj_key() == static_cast<Key>(SystemKey::Dictionary));
+        if (auto it = dictionary_cache_.find(key); it != dictionary_cache_.end())
+        {
+            return it->second;
+        }
+        return {};
+    }
+
+    void set_dictionary(const Key key, std::string name)
+    {
+        auto& dictionary = get_dictionary();
+        dictionary_cache_[key] = name;
+        dictionary.emplace(key, std::move(name));
+    }
+
 protected:
 	void close()
 	{
+        dictionary_.reset();
 		current_folder_map_.clear();
 		if (!temp_file_.empty())
 		{
@@ -394,6 +485,7 @@ protected:
 			[&](std::unique_ptr<IObjView> ptr)
 			{
 				auto key = ptr->obj_key();
+                if (key < 0) return ; // SystemKey
 				current_folder_map_.emplace(key, std::move(ptr));
 			});
 	}
@@ -405,6 +497,54 @@ protected:
 		open_folder_local(this, 0);
 	}
 
+    IDson& get_dictionary()
+    {
+        const auto idson = [&]()->IDson&
+        {
+            HI_ASSERT(dictionary_);
+            auto real_view = dictionary_->self();
+            auto ptr = dynamic_cast<IDson *>(real_view);
+            HI_ASSERT(!!ptr);
+            return *ptr;
+        };
+        if (dictionary_) return idson();
+        const auto dict_key = static_cast<Key>(SystemKey::Dictionary);
+        const auto dict_locator = [&](std::unique_ptr<IObjView> ptr)
+            {
+                if (dict_key != ptr->obj_key()) return;
+                auto real_view = ptr->self();
+                if (real_view->data_type() != detail::types_map<detail::DsonContainer>::value)
+                {
+                    return;
+                }
+                dictionary_ = std::move(ptr);
+            };
+
+        const auto load_cache = [&]()->IDson&
+        {
+            auto& re = idson();
+            re.private_iterate([&](std::unique_ptr<IObjView> ptr)
+            {
+                std::string name;
+                if (cast(name, ptr.get()))
+                {
+                    dictionary_cache_.emplace(ptr->obj_key(), std::move(name));
+                }
+            });
+            return re;
+        };
+
+        DsonFromFile::private_iterate(dict_locator);
+        if (dictionary_) return load_cache();
+
+        // Нет ещё справочника => добавляю
+        NewDson dson;
+        dson.set_key_cast(SystemKey::Dictionary);
+        NewDson::emplace_dson(dson.move_self());
+        NewDson::private_iterate(dict_locator);
+        return idson();
+    }
+
 protected:
 	Path current_path_;
 
@@ -413,6 +553,11 @@ protected:
 
 	// Если был создан временный файл
 	std::string temp_file_;
+
+    // Dictionary filter
+    std::string dictionary_filter_;
+    std::map<Key, std::string> dictionary_cache_;
+    std::unique_ptr<IObjView> dictionary_;
 };
 
 } // namespace dson

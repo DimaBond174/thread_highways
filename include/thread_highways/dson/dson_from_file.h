@@ -51,8 +51,9 @@ public:
 	}
 
 	// Содержимое любого объекта как последовательность байт
-	bool buf_view(BufUCharView & result) override
+    bool buf_view(BufUCharView & result, bool& with_header) override
 	{
+        with_header = true;
 		const auto size = header_.data_size_ + detail::header_size;
 		char * full_obj = memfile_->get_window(offset_, size);
 		HI_ASSERT(full_obj);
@@ -179,7 +180,10 @@ public:
 	result_t upload(IDson & dson)
 	{
 		// Зачистка текущего
-		clear();
+        // clear();
+        data_size_without_new_dson_ = 0;
+        NewDson::clear();
+        HI_ASSERT(!!memfile_); // загрузка должна идти в файл
 		// data_size_in_file_ = 0;
 		// NewDson::clear();
 
@@ -252,7 +256,7 @@ public:
 		}
 
 		// 2. Меняю файлы
-		memfile_->close();
+		if (memfile_) memfile_->close();
 		std::remove(path.c_str());
 		if (0 != std::rename(tmp_path.c_str(), path.c_str()))
 		{
@@ -366,6 +370,7 @@ public: // ICanUploadIntoDson
 public: // IDson
 	void clear() override
 	{
+        memfile_.reset();
 		// memfile_->close();
 		data_size_without_new_dson_ = 0;
 		NewDson::clear();

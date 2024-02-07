@@ -37,15 +37,16 @@ using Key = std::int32_t;
 
 enum class SystemKey : std::int32_t
 {
-	Deleted = 0,
-	RouteID = 1,
-	Error,
+    Dictionary = -5,
+    Deleted = -4,
+    RouteID = -3,
+    Error = -2,
 
-	LastInEnum, // be shure this last
+    LastInEnum = -1, // be shure this last
 };
 
-// Reserved keys [-999 .. 999]
-inline constexpr Key min_positive_user_key{1000};
+// Reserved keys [-999 .. 1]
+inline constexpr Key min_positive_user_key{0};
 inline constexpr Key max_negative_user_key{-1000};
 
 inline bool is_system_key(Key key)

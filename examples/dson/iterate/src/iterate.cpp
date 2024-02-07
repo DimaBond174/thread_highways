@@ -127,6 +127,8 @@ void default_editor_save_as()
 		auto cnt = dson_controller.items_on_level();
 		HI_ASSERT(cnt == 2u);
 
+        std::cout << dson_controller << std::endl;
+
 		dson_controller.save_as("test.dson");
 	}
 	{
@@ -137,10 +139,20 @@ void default_editor_save_as()
 	}
 }
 
+void print_dson_file(std::string path)
+{
+    std::cout << "===============================\n"
+     << path << "\n===============================\n";
+        hi::dson::DsonEditController dson_on_disk;
+        dson_on_disk.open(path);
+        std::cout << dson_on_disk << std::endl;
+}
+
 int main(int /* argc */, char ** /* argv */)
 {
-	// print_dson_edit_controller();
+    print_dson_edit_controller();
 	default_editor_save_as();
+    //print_dson_file("/home/dik/workspace/tmp/dson123.dson");
 	std::cout << "Tests finished" << std::endl;
 	return 0;
 }

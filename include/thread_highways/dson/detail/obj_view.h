@@ -94,11 +94,24 @@ struct IObjView
 	}
 
 	// Содержимое любого объекта как последовательность байт
-	virtual bool buf_view(BufUCharView & /*result*/)
+    virtual bool buf_view(BufUCharView& /*result*/, bool& /*with_header*/)
 	{
 		HI_ASSERT(false);
 		return false;
 	}
+
+    bool buf_view_skip_header(BufUCharView& result)
+    {
+        bool with_header{false};
+        bool re = buf_view(result, with_header);
+        if (!re || !with_header) return re;
+
+        const char *data = reinterpret_cast<const char *>(result.data());
+        DsonHeader header;
+        detail::get_and_shift(data, header);
+        detail::get(data, header.data_size_, result);
+        return re;
+    }
 
 	/**
 	 * @brief upload_to

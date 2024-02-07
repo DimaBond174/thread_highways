@@ -15,6 +15,13 @@ namespace hi
 
 using RouteID = std::int64_t;
 
+enum class SystemSignalRoute : std::int64_t
+{
+    ShutdownSignal = -2,
+
+    LastInEnum = -1, // be shure this last
+};
+
 struct IHasRouteID
 {
 	virtual ~IHasRouteID() = default;

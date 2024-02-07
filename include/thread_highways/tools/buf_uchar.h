@@ -91,7 +91,7 @@ public:
 
 private:
 	const value_type * buf_{nullptr};
-	std::int32_t size_{0u};
+	std::int32_t size_{0};
 };
 
 class BufUChar

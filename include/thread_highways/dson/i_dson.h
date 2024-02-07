@@ -10,6 +10,7 @@
 
 #include <thread_highways/dson/detail/dson_obj.h>
 #include <thread_highways/dson/detail/i_uploader.h>
+#include <thread_highways/tools/exception.h>
 #include <thread_highways/dson/i_has_route_id.h>
 #include <thread_highways/tools/result_code.h>
 
@@ -28,23 +29,25 @@ template <typename T>
 inline bool cast(T & result, IObjView * view)
 {
 	auto real_view = view->self();
-	if (real_view->data_type() != detail::types_map<T>::value)
-		return false;
-	if (auto ptr = dynamic_cast<DsonObj<T> *>(real_view); ptr)
-	{
-		ptr->get(result);
-		return true;
-	}
-	if (auto ptr = dynamic_cast<DsonObjView *>(real_view); ptr)
-	{
-		ptr->get<T>(result);
-		return true;
-	}
+    if (real_view->data_type() == detail::types_map<T>::value)
+    {
+    if (auto ptr = dynamic_cast<DsonObj<T> *>(real_view); ptr)
+    {
+        ptr->get(result);
+        return true;
+    }
+    if (auto ptr = dynamic_cast<DsonObjView *>(real_view); ptr)
+    {
+        ptr->get<T>(result);
+        return true;
+    }
+    }
 
 	BufUCharView buf;
-	if (!real_view->buf_view(buf))
+    bool with_header{false};
+    if (!real_view->buf_view(buf, with_header))
 		return false;
-	detail::GetObj<T, detail::IsDsonNumber<T>::result>::get(reinterpret_cast<const char *>(buf.data()), result);
+    detail::GetObj<T, detail::IsDsonNumber<T>::result>::get(reinterpret_cast<const char *>(buf.data()), buf.size(), with_header, result);
 	return true;
 }
 
@@ -220,6 +223,7 @@ public:
 	virtual bool has(const Key key) = 0;
 	virtual void erase(const Key)
 	{
+        HI_ASSERT_INFO(false, "Not implemented");
 	}
 
 	// Поиск с обработкой найденного
@@ -237,6 +241,12 @@ public:
 	{
 		emplace_dson(val.move_self());
 	}
+
+    void emplace_idson(IDson* idson)
+    {
+        HI_ASSERT(!!idson);
+        emplace_dson(idson->move_self());
+    }
 
 	template <typename K, typename T>
 	void emplace(const K key, T val)
@@ -278,7 +288,7 @@ public:
 	}
 
 	template <typename K>
-	bool get(const K key, BufUCharView & result)
+    bool get(const K key, BufUCharView & result, bool& with_header)
 	{
 		bool uploaded{false};
 		const auto casted_key = static_cast<Key>(key);
@@ -286,7 +296,7 @@ public:
 			casted_key,
 			[&](IObjView * view)
 			{
-				uploaded = view->buf_view(result);
+                uploaded = view->buf_view(result, with_header);
 			});
 
 		return found && uploaded;
@@ -302,7 +312,7 @@ public:
 			[&](IObjView * view)
 			{
 				BufUCharView buf;
-				uploaded = view->buf_view(buf);
+                uploaded = view->buf_view_skip_header(buf);
 				if (uploaded)
 				{
 					result = std::string_view{
@@ -339,7 +349,7 @@ public:
 			[&](IObjView * view)
 			{
 				BufUCharView buf;
-				if (!view->buf_view(buf))
+                if (!view->buf_view_skip_header(buf))
 					return;
 				uploaded =
 					val.deserialize(reinterpret_cast<const char *>(buf.data()), static_cast<std::int32_t>(buf.size()));
@@ -373,6 +383,12 @@ public:
 	{
 		emplace(SystemKey::RouteID, route_id);
 	}
+
+    template<typename T>
+    void set_route_id_cast(T route_id)
+    {
+        emplace(SystemKey::RouteID, static_cast<RouteID>(route_id));
+    }
 
 	friend class DsonEditController;
 

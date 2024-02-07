@@ -4,6 +4,8 @@
 #include <atomic>
 #include <vector>
 
+extern void scan_files(bool need_to_start_counter);
+
 void channels_publish_one_for_many()
 {
 	hi::CoutScope scope("channels_publish_one_for_many");
@@ -107,9 +109,10 @@ void count_copies_of_the_publication()
 
 int main(int /* argc */, char ** /* argv */)
 {
-	channels_publish_one_for_many();
-	count_copies_of_the_publication();
-
+    //channels_publish_one_for_many();
+    //count_copies_of_the_publication();
+    scan_files(true);
+    scan_files(false);
 	std::cout << "Test finished" << std::endl;
 	return 0;
 }

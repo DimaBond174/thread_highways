@@ -164,8 +164,7 @@ void print_dson(std::ostream & stream, DsonEditController & dson, std::uint32_t 
 		{
 			dson.open_folder(i);
 			print_dson(stream, dson, level + 2u);
-			std::size_t index;
-			dson.close_folder(index);
+            std::size_t index =	dson.close_folder();
 			HI_ASSERT(i == index);
 		}
 		else
@@ -182,10 +181,10 @@ void print_dson(std::ostream & stream, DsonEditController & dson, std::uint32_t 
 std::ostream & operator<<(std::ostream & stream, DsonEditController & dson)
 {
 	// Встаём в исходное
-	std::size_t out_index;
-	while (ok == dson.close_folder(out_index))
-	{
-	}
+    while (!dson.is_top_folder_level())
+    {
+        dson.close_folder();
+    }
 
 	// Обходим каталоги
 	detail::print_string_on_level("{\"key\":" + std::to_string(dson.obj_key()) + ",", stream, 0u);

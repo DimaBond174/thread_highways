@@ -211,7 +211,23 @@ public:
 		// header_.data_size_ -= obj->all_size();
 		// HI_ASSERT(header_.data_size_ >= 0);
 		map_.emplace(key, std::move(obj));
+        map_it_.reset();
 	}
+
+    virtual void rename_item(const Key old_key, const Key new_key)
+    {
+        if (old_key == new_key) return;
+        auto it = map_.find(old_key);
+        HI_ASSERT(it != map_.end());
+        // Пока возможность изменить ключ есть только у IDson
+        HI_ASSERT(it->second->self()->data_type() == detail::types_map<detail::DsonContainer>::value);
+        auto dson = dynamic_cast<IDson *>(it->second->self());
+        HI_ASSERT(dson);
+        dson->set_key(new_key);
+        map_[new_key] = std::move(it->second);
+        map_[old_key] = std::make_unique<detail::DeletedObj>(old_key);
+        map_it_.reset();
+    }
 
 public: // IDson
 	void clear() override
